@@ -8,6 +8,9 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
@@ -103,93 +106,60 @@ public class MainActivity extends Activity {
     }
 
     private View buildShell() {
-        ScrollView outer = new ScrollView(this);
         root = vertical();
-        root.setPadding(dp(16), dp(16), dp(16), dp(96));
-        outer.setBackgroundColor(Color.rgb(247,249,252));
-        outer.addView(root);
+        root.setBackgroundColor(Color.rgb(248,250,253));
 
-        TextView title = text("♥ Couple Finance 2.5", 24, true);
-        title.setTextColor(Color.rgb(7, 51, 94));
-        title.setPadding(dp(4),dp(6),dp(4),dp(2));
-        root.addView(title);
+        LinearLayout header = horizontal();
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(14),dp(12),dp(12),dp(12));
+        GradientDrawable hg=new GradientDrawable(); hg.setColor(Color.rgb(7,57,103)); header.setBackground(hg);
 
-        TextView sub = text("Tableau de bord • Consultation et saisie", 12, false);
-        sub.setTextColor(Color.DKGRAY);
-        root.addView(sub);
-        spacer(root, 10);
+        TextView menu=text("☰",26,false); menu.setTextColor(Color.WHITE); menu.setGravity(Gravity.CENTER);
+        header.addView(menu,new LinearLayout.LayoutParams(dp(42),dp(52)));
+        TextView heart=text("♥",36,true); heart.setTextColor(Color.rgb(255,42,82)); heart.setGravity(Gravity.CENTER);
+        header.addView(heart,new LinearLayout.LayoutParams(dp(48),dp(54)));
 
-        LinearLayout cloudCard=cardBox();
-        TextView cloudTitle=text("☁  Stockage cloud",16,true);cloudTitle.setTextColor(Color.rgb(7,51,94));cloudCard.addView(cloudTitle);
-        TextView linkLabel = text("Lien du dossier OneDrive (optionnel)", 12, true);
-        cloudCard.addView(linkLabel);
-        oneDriveLink = input("https://1drv.ms/... ou https://onedrive.live.com/...");
+        LinearLayout brand=vertical();
+        TextView title=text("Couple Finance",24,true); title.setTextColor(Color.WHITE); brand.addView(title);
+        TextView sub=text("Consultation et saisies vers PC",11,false); sub.setTextColor(Color.rgb(225,238,250)); brand.addView(sub);
+        header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
+
+        TextView bell=text("🔔",24,true); bell.setTextColor(Color.WHITE); bell.setGravity(Gravity.CENTER);
+        bell.setOnClickListener(v->toast("Notifications Couple Finance")); header.addView(bell,new LinearLayout.LayoutParams(dp(46),dp(52)));
+        TextView gear=text("⚙",28,true); gear.setTextColor(Color.WHITE); gear.setGravity(Gravity.CENTER);
+        gear.setOnClickListener(v->showSection("Paramètres")); header.addView(gear,new LinearLayout.LayoutParams(dp(48),dp(52)));
+        root.addView(header,new LinearLayout.LayoutParams(-1,-2));
+
+        ScrollView pageScroll=new ScrollView(this); pageScroll.setFillViewport(true);
+        content=vertical(); content.setPadding(dp(12),dp(10),dp(12),dp(18));
+        pageScroll.addView(content,new ScrollView.LayoutParams(-1,-2));
+        root.addView(pageScroll,new LinearLayout.LayoutParams(-1,0,1));
+        root.addView(buildBottomNav(),new LinearLayout.LayoutParams(-1,dp(72)));
+
+        connectionStatus=text("Aucun stockage cloud connecté.",12,false);
+        syncStatus=text("",11,false);
+        oneDriveLink=input("https://1drv.ms/... ou https://onedrive.live.com/...");
         oneDriveLink.setText(getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_LINK, ""));
-        cloudCard.addView(oneDriveLink, new LinearLayout.LayoutParams(-1, -2));
-
-        LinearLayout linkRow = horizontal();
-        Button saveLink = button("Mémoriser le lien");
-        saveLink.setOnClickListener(v -> saveOneDriveLink());
-        linkRow.addView(saveLink, weight());
-        Button openLink = button("Ouvrir OneDrive");
-        openLink.setOnClickListener(v -> openOneDriveLink());
-        linkRow.addView(openLink, weight());
-        cloudCard.addView(linkRow);
-
-        LinearLayout connectRow = horizontal();
-        Button connect = button("Choisir dossier OneDrive / Google Drive");
-        connect.setOnClickListener(v -> chooseFolder());
-        connectRow.addView(connect, weight());
-        Button refresh = button("Actualiser");
-        refresh.setOnClickListener(v -> refreshSnapshot(true));
-        connectRow.addView(refresh, weight());
-        cloudCard.addView(connectRow);
-
-        LinearLayout fileRow = horizontal();
-        Button chooseWorkbook = button("Choisir Excel OneDrive / Google Drive");
-        chooseWorkbook.setOnClickListener(v -> chooseWorkbookFile());
-        fileRow.addView(chooseWorkbook, weight());
-        Button chooseView = button("Choisir vue PC JSON (OneDrive / Google Drive)");
-        chooseView.setOnClickListener(v -> chooseViewFile());
-        fileRow.addView(chooseView, weight());
-        cloudCard.addView(fileRow);
-
-        TextView help = text("Stockage cloud : OneDrive ou Google Drive. Avec Google Drive, utilise directement les boutons Choisir dossier / Excel / JSON et sélectionne ton compte Google Drive. Avec OneDrive, tu peux aussi mémoriser et ouvrir le lien du dossier.", 11, false);
-        help.setTextColor(Color.GRAY);
-        help.setPadding(0, dp(4), 0, dp(4));
-        cloudCard.addView(help);
-
-        connectionStatus = text("Aucun stockage cloud connecté.", 12, false);
-        connectionStatus.setPadding(dp(8), dp(8), dp(8), dp(8));
-        cloudCard.addView(connectionStatus);
-
-        syncStatus = text("", 11, false);
-        syncStatus.setTextColor(Color.GRAY);
-        cloudCard.addView(syncStatus);
-        root.addView(cloudCard);
-        spacer(root, 10);
-
-        LinearLayout quick1=horizontal();
-        String[] q1={"⌂ Accueil","▣ Comptes","$ Revenus"};
-        String[] q1s={"Accueil","Comptes","Revenus"};
-        for(int i=0;i<q1.length;i++){Button b=modernNavButton(q1[i]);final String sec=q1s[i];b.setOnClickListener(v->showSection(sec));quick1.addView(b,weight());}
-        root.addView(quick1);
-        LinearLayout quick2=horizontal();
-        String[] q2={"− Dépenses","▤ Dettes","＋ Saisie"};
-        String[] q2s={"Dépenses","Dettes","Saisie"};
-        for(int i=0;i<q2.length;i++){Button b=modernNavButton(q2[i]);final String sec=q2s[i];b.setOnClickListener(v->showSection(sec));quick2.addView(b,weight());}
-        root.addView(quick2);
-        LinearLayout quick3=horizontal();
-        String[] q3={"⇄ Transactions","◎ Épargne","▦ Agenda"};
-        String[] q3s={"Transactions","Épargne","Agenda"};
-        for(int i=0;i<q3.length;i++){Button b=modernNavButton(q3[i]);final String sec=q3s[i];b.setOnClickListener(v->showSection(sec));quick3.addView(b,weight());}
-        root.addView(quick3);
-        spacer(root, 10);
-
-        content = vertical();
-        root.addView(content);
         showSection("Accueil");
-        return outer;
+        return root;
+    }
+
+    private View buildBottomNav(){
+        LinearLayout nav=horizontal(); nav.setGravity(Gravity.CENTER); nav.setPadding(dp(4),dp(4),dp(4),dp(4));
+        nav.setBackgroundColor(Color.WHITE); nav.setElevation(dp(10));
+        nav.addView(bottomButton("⌂","Accueil","Accueil",false),weight());
+        nav.addView(bottomButton("🛒","Dépenses","Dépenses",false),weight());
+        nav.addView(bottomButton("＋","Saisie","Saisie",true),weight());
+        nav.addView(bottomButton("▣","Comptes","Comptes",false),weight());
+        nav.addView(bottomButton("▦","Plus","Plus",false),weight());
+        return nav;
+    }
+
+    private Button bottomButton(String icon,String label,String section,boolean center){
+        Button b=button(icon+"\n"+label); b.setGravity(Gravity.CENTER); b.setTextSize(center?12:11);
+        b.setTextColor(center?Color.WHITE:Color.rgb(66,76,88)); b.setPadding(dp(2),dp(2),dp(2),dp(2));
+        GradientDrawable g=new GradientDrawable(); g.setColor(center?Color.rgb(18,102,225):Color.WHITE); g.setCornerRadius(dp(center?32:4)); b.setBackground(g);
+        if(center)b.setElevation(dp(7)); b.setOnClickListener(v->showSection(section)); return b;
     }
 
     private void saveOneDriveLink() {
@@ -342,7 +312,7 @@ public class MainActivity extends Activity {
             }
             if (viewUri == null) {
                 snapshot = null;
-                syncStatus.setText("La vue lecture seule n'est pas encore disponible. Ouvrez Couple Finance sur le PC puis sauvegardez/actualisez la vue téléphone.");
+                if(syncStatus!=null)syncStatus.setText("La vue lecture seule n'est pas encore disponible. Ouvrez Couple Finance sur le PC puis sauvegardez/actualisez la vue téléphone.");
                 if (userMessage) toast("Fichier de vue non trouvé dans OneDrive.");
                 showSection(currentSection);
                 return;
@@ -351,7 +321,7 @@ public class MainActivity extends Activity {
             snapshot = new JSONObject(raw);
             String gen = snapshot.optString("generatedAt", "—");
             String period = snapshot.optString("period", "—");
-            syncStatus.setText("Vue PC : " + gen + "   •   " + period);
+            if(syncStatus!=null)syncStatus.setText("Vue PC : " + gen + "   •   " + period);
             setConnection(true, "OneDrive connecté • Excel de saisie + vue PC détectés");
             showSection(currentSection);
             if (userMessage) toast("Vue Couple Finance actualisée.");
@@ -373,62 +343,134 @@ public class MainActivity extends Activity {
     }
 
     private void setConnection(boolean ok, String msg) {
-        connectionStatus.setText((ok ? "✓ " : "⚠ ") + msg);
-        connectionStatus.setTextColor(ok ? Color.rgb(24,137,91) : Color.rgb(190,55,55));
+        if(connectionStatus!=null){connectionStatus.setText((ok ? "✓ " : "⚠ ") + msg);connectionStatus.setTextColor(ok ? Color.rgb(24,137,91) : Color.rgb(190,55,55));}
     }
 
     private void showSection(String section) {
-        currentSection = section;
-        if (content == null) return;
-        content.removeAllViews();
-        TextView h = text(section, 22, true);
-        h.setTextColor(Color.rgb(7,51,94));h.setPadding(dp(2),dp(8),0,dp(4));
-        content.addView(h);
-
-        if ("Saisie".equals(section)) {
-            buildEntryForm();
-            return;
-        }
-        TextView ro = text("Dépenses".equals(section) ? "Lecture seule, sauf l’action Reporter sur une échéance." : "Lecture seule — les données se modifient uniquement dans l'application PC.", 11, false);
-        ro.setTextColor(Color.GRAY);
-        content.addView(ro);
-        spacer(content, 8);
-
-        if (snapshot == null) {
-            content.addView(infoCard("Aucune donnée", "Connectez OneDrive puis appuyez sur Actualiser. Le PC doit avoir créé " + VIEW_NAME + "."));
-            return;
-        }
-
-        switch (section) {
-            case "Accueil": renderHome(); break;
-            case "Comptes": renderAccounts(); break;
-            case "Revenus": renderIncome(); break;
-            case "Dépenses": renderExpenses(); break;
-            case "Transactions": renderTransactions(); break;
-            case "Dettes": renderDebtsGoals(); break;
-            case "Épargne": renderSavings(); break;
-            case "Agenda": renderAgenda(); break;
-            default: renderHome();
+        currentSection=section;if(content==null)return;content.removeAllViews();
+        if("Accueil".equals(section)){renderHome();return;}
+        if("Paramètres".equals(section)){renderSettings();return;}
+        if("Plus".equals(section)){renderMore();return;}
+        TextView h=text(section,22,true);h.setTextColor(Color.rgb(7,51,94));h.setPadding(dp(2),dp(8),0,dp(4));content.addView(h);
+        if("Saisie".equals(section)){buildEntryForm();return;}
+        TextView ro=text("Dépenses".equals(section)?"Lecture seule, sauf l’action Reporter sur une échéance.":"Lecture seule — les données principales proviennent de l'application PC.",11,false);
+        ro.setTextColor(Color.GRAY);content.addView(ro);spacer(content,8);
+        if(snapshot==null){content.addView(infoCard("Aucune donnée","Connecte le stockage cloud dans Plus → Paramètres, puis actualise la vue PC."));return;}
+        switch(section){
+            case "Comptes":renderAccounts();break;case "Revenus":renderIncome();break;case "Dépenses":renderExpenses();break;
+            case "Transactions":renderTransactions();break;case "Dettes":renderDebtsGoals();break;case "Épargne":renderSavings();break;
+            case "Agenda":renderAgenda();break;case "Budget":renderBudgetMobile();break;case "Objectifs":renderGoalsMobile();break;
+            case "Projections":renderProjectionMobile();break;case "Rapports":renderReportsMobile();break;default:renderHome();
         }
     }
 
-    private void renderHome() {
-        LinearLayout write=cardBox();
-        TextView wt=text("＋ Nouvelle saisie",17,true);wt.setTextColor(Color.rgb(18,102,210));write.addView(wt);
-        TextView ws=text("Ajouter une dépense, un revenu, une transaction, un remboursement de crédit, une épargne ou un événement.",12,false);ws.setTextColor(Color.DKGRAY);ws.setPadding(0,dp(4),0,dp(7));write.addView(ws);
-        Button wb=primaryButton("Écrire maintenant");wb.setOnClickListener(v->showSection("Saisie"));write.addView(wb,new LinearLayout.LayoutParams(-1,-2));
-        content.addView(write);
-        JSONObject s = snapshot.optJSONObject("summary");
-        if (s == null) s = new JSONObject();
-        content.addView(kpiCard("Revenus reçus à date", money(s.optDouble("incomeReceived",0)), "À recevoir ce mois : " + money(s.optDouble("incomeExpected",0)), true));
-        content.addView(kpiCard("Dépenses entrées à date", money(s.optDouble("expenseActual",0)), "Total prévu du mois : " + money(s.optDouble("expensePlanned",0)), false));
-        content.addView(kpiCard("Situation des comptes", money(s.optDouble("accountsNet",0)), "Avoirs : " + money(s.optDouble("assets",0)) + " • Crédit/dettes comptes : " + money(s.optDouble("credit",0)), s.optDouble("accountsNet",0)>=0));
-        content.addView(kpiCard("Dettes totales", money(s.optDouble("totalDebt",0)), "Objectifs financés / mois : " + money(s.optDouble("financedGoalsMonthly",0)), false));
-        addCountSummary("Comptes", "accounts");
-        addCountSummary("Transactions", "transactions");
-        addCountSummary("Dettes", "debts");
-        addCountSummary("Objectifs", "goals");
+    private void renderHome(){
+        LinearLayout cloud=softCard(Color.rgb(244,252,247),Color.rgb(210,235,218));
+        LinearLayout cr=horizontal();cr.setGravity(Gravity.CENTER_VERTICAL);
+        TextView cloudIcon=text("☁",34,true);cloudIcon.setTextColor(Color.rgb(12,132,222));cloudIcon.setGravity(Gravity.CENTER);
+        cr.addView(cloudIcon,new LinearLayout.LayoutParams(dp(66),dp(72)));
+        LinearLayout ci=vertical();boolean connected=(treeUri!=null||workbookUri!=null||viewUri!=null);
+        TextView ct=text(connected?"✓  OneDrive connecté":"○  Stockage cloud à connecter",16,true);ct.setTextColor(connected?Color.rgb(18,112,49):Color.rgb(110,118,128));ci.addView(ct);
+        TextView folder=text("Dossier : Couple Finance",12,false);folder.setTextColor(Color.GRAY);ci.addView(folder);
+        TextView xf=text((workbookUri!=null?"✓ ":"○ ")+WORKBOOK_NAME,11,false);xf.setTextColor(workbookUri!=null?Color.rgb(20,120,58):Color.GRAY);ci.addView(xf);
+        TextView jf=text((viewUri!=null?"✓ ":"○ ")+VIEW_NAME,11,false);jf.setTextColor(viewUri!=null?Color.rgb(20,120,58):Color.GRAY);ci.addView(jf);
+        cr.addView(ci,new LinearLayout.LayoutParams(0,-2,1));
+        Button change=smallPill("▣  Changer");change.setOnClickListener(v->showSection("Paramètres"));cr.addView(change,new LinearLayout.LayoutParams(dp(105),dp(48)));
+        cloud.addView(cr);content.addView(cloud);
+
+        LinearLayout period=horizontal();period.setGravity(Gravity.CENTER_VERTICAL);period.setPadding(0,dp(7),0,dp(7));
+        Button prev=smallPill("‹");prev.setOnClickListener(v->toast("La période affichée suit la période sélectionnée sur le PC."));period.addView(prev,new LinearLayout.LayoutParams(dp(42),dp(48)));
+        String per=snapshot==null?"Période PC":snapshot.optString("period","Période PC");
+        Button pb=smallPill("▣  "+per+" ⌄");period.addView(pb,new LinearLayout.LayoutParams(0,dp(48),1));
+        Button refresh=smallPill("↻ Actualiser");refresh.setOnClickListener(v->refreshSnapshot(true));period.addView(refresh,new LinearLayout.LayoutParams(dp(104),dp(48)));
+        TextView synced=text(snapshot!=null?"✓ Synchronisé":"○ Hors ligne",10,true);synced.setGravity(Gravity.CENTER);synced.setTextColor(snapshot!=null?Color.rgb(20,120,58):Color.GRAY);
+        GradientDrawable sg=new GradientDrawable();sg.setColor(snapshot!=null?Color.rgb(235,249,239):Color.rgb(242,244,247));sg.setCornerRadius(dp(18));synced.setBackground(sg);
+        LinearLayout.LayoutParams spp=new LinearLayout.LayoutParams(dp(88),dp(42));spp.setMargins(dp(4),0,0,0);period.addView(synced,spp);content.addView(period);
+
+        JSONObject sm=snapshot==null?null:snapshot.optJSONObject("summary");if(sm==null)sm=new JSONObject();
+        double inc=sm.optDouble("incomeReceived",0),exp=sm.optDouble("expenseActual",0),planned=sm.optDouble("expensePlanned",0),solde=inc-exp,saveRate=inc>0?Math.max(0,solde/inc*100):0;
+        LinearLayout kpis=horizontal();
+        kpis.addView(homeKpi("▰ Revenus",money(inc),"Prévu : "+money(sm.optDouble("incomeExpected",inc)),Color.rgb(233,245,255),Color.rgb(18,92,190)),weight());
+        kpis.addView(homeKpi("🛒 Dépenses",money(exp),"Budget : "+money(planned),Color.rgb(255,238,242),Color.rgb(190,31,53)),weight());
+        kpis.addView(homeKpi("▥ Solde du mois",money(solde),"Épargne : "+Math.round(saveRate)+" %",Color.rgb(236,249,238),Color.rgb(20,115,43)),weight());content.addView(kpis);
+
+        LinearLayout mini=horizontal();
+        mini.addView(summaryTile("▥","Comptes",String.valueOf(arrayLen("accounts")),"Voir le détail","Comptes"),weight());
+        mini.addView(summaryTile("▣","Dettes",money(sm.optDouble("totalDebt",0)),"Voir le détail","Dettes"),weight());
+        mini.addView(summaryTile("◎","Objectifs",String.valueOf(arrayLen("goals")),"Voir la progression","Objectifs"),weight());
+        mini.addView(summaryTile("◉","Analyse IA","Conseils","Voir recommandations","Plus"),weight());content.addView(mini);
+
+        String[][] menu={{"⌂","Accueil","Accueil"},{"▣","Comptes","Comptes"},{"●","Revenus","Revenus"},{"🛒","Dépenses","Dépenses"},{"◉","Dettes","Dettes"},{"◔","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"▥","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"}};
+        for(int r=0;r<2;r++){LinearLayout row=horizontal();for(int j=0;j<5;j++){int ix=r*5+j;row.addView(menuTile(menu[ix][0],menu[ix][1],menu[ix][2],ix==0),weight());}content.addView(row);}
+        renderUpcomingHome();renderExpenseDistributionHome(exp);
     }
+
+    private int arrayLen(String key){JSONArray a=snapshot==null?null:snapshot.optJSONArray(key);return a==null?0:a.length();}
+
+    private View homeKpi(String title,String value,String sub,int bg,int fg){
+        LinearLayout c=softCard(bg,bg);c.setPadding(dp(8),dp(12),dp(7),dp(12));TextView t=text(title,11,true);t.setTextColor(fg);c.addView(t);
+        TextView v=text(value,18,true);v.setTextColor(fg);v.setPadding(0,dp(8),0,dp(3));c.addView(v);TextView x=text(sub,9,false);x.setTextColor(fg);c.addView(x);return c;
+    }
+    private View summaryTile(String icon,String title,String value,String sub,String section){
+        LinearLayout c=softCard(Color.WHITE,Color.rgb(226,232,240));c.setPadding(dp(5),dp(8),dp(5),dp(8));c.setGravity(Gravity.CENTER);
+        TextView i=text(icon,18,true);i.setTextColor(Color.rgb(9,59,106));i.setGravity(Gravity.CENTER);c.addView(i);
+        TextView t=text(title,9,true);t.setTextColor(Color.rgb(9,48,91));t.setGravity(Gravity.CENTER);c.addView(t);
+        TextView v=text(value,12,true);v.setTextColor(Color.rgb(5,35,74));v.setGravity(Gravity.CENTER);c.addView(v);
+        TextView x=text(sub,8,false);x.setTextColor(Color.GRAY);x.setGravity(Gravity.CENTER);c.addView(x);c.setOnClickListener(vw->showSection(section));return c;
+    }
+    private View menuTile(String icon,String label,String section,boolean active){
+        LinearLayout c=softCard(active?Color.rgb(232,244,255):Color.WHITE,active?Color.rgb(135,191,250):Color.rgb(226,232,240));c.setPadding(dp(2),dp(9),dp(2),dp(9));c.setGravity(Gravity.CENTER);
+        TextView i=text(icon,19,true);i.setGravity(Gravity.CENTER);i.setTextColor(active?Color.rgb(18,91,195):Color.rgb(8,59,106));c.addView(i);
+        TextView t=text(label,8,active);t.setGravity(Gravity.CENTER);t.setTextColor(active?Color.rgb(18,91,195):Color.rgb(8,35,73));c.addView(t);c.setOnClickListener(v->showSection(section));return c;
+    }
+
+    private void renderUpcomingHome(){
+        LinearLayout card=softCard(Color.WHITE,Color.rgb(226,232,240));LinearLayout hr=horizontal();TextView h=text("Prochaines échéances",18,true);h.setTextColor(Color.rgb(7,51,94));hr.addView(h,new LinearLayout.LayoutParams(0,-2,1));
+        Button all=smallPill("Voir tout ›");all.setOnClickListener(v->showSection("Dépenses"));hr.addView(all,new LinearLayout.LayoutParams(dp(92),dp(40)));card.addView(hr);
+        JSONArray a=snapshot==null?null:snapshot.optJSONArray("recurringView");if(a==null||a.length()==0)a=snapshot==null?null:snapshot.optJSONArray("upcoming");
+        if(a==null||a.length()==0){TextView e=text("Aucune échéance disponible.",11,false);e.setTextColor(Color.GRAY);e.setPadding(0,dp(10),0,dp(6));card.addView(e);}
+        else for(int i=0;i<Math.min(4,a.length());i++){final JSONObject x=a.optJSONObject(i);if(x==null)continue;LinearLayout row=horizontal();row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(7),0,dp(7));
+            String ds=x.optString("dueDate",x.optString("date","—"));TextView day=text(shortDate(ds),10,true);day.setGravity(Gravity.CENTER);day.setTextColor(Color.rgb(170,35,45));GradientDrawable dg=new GradientDrawable();dg.setColor(Color.rgb(255,239,242));dg.setCornerRadius(dp(9));day.setBackground(dg);row.addView(day,new LinearLayout.LayoutParams(dp(54),dp(50)));
+            LinearLayout info=vertical();TextView n=text(x.optString("name",x.optString("desc","Échéance")),12,true);n.setTextColor(Color.rgb(7,45,84));info.addView(n);TextView sub=text(x.optString("owner",x.optString("cat","Commun")),9,false);sub.setTextColor(Color.GRAY);info.addView(sub);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            TextView amt=text(money(x.optDouble("amount",0)),11,true);amt.setTextColor(Color.rgb(7,45,84));amt.setGravity(Gravity.RIGHT);row.addView(amt,new LinearLayout.LayoutParams(dp(78),-2));
+            if(x.has("id")||x.has("period")){Button rep=smallPill("▣ Reporter");rep.setOnClickListener(v->chooseDeferralDate(x));row.addView(rep,new LinearLayout.LayoutParams(dp(88),dp(42)));}card.addView(row);
+        }content.addView(card);
+    }
+    private String shortDate(String s){try{Date d=new SimpleDateFormat("yyyy-MM-dd",Locale.CANADA_FRENCH).parse(s);return new SimpleDateFormat("dd\nMMM",Locale.CANADA_FRENCH).format(d).replace(".","");}catch(Exception e){return s.length()>5?s.substring(Math.max(0,s.length()-5)):s;}}
+
+    private void renderExpenseDistributionHome(double total){
+        LinearLayout card=softCard(Color.WHITE,Color.rgb(226,232,240));LinearLayout hr=horizontal();TextView h=text("Répartition des dépenses",18,true);h.setTextColor(Color.rgb(7,51,94));hr.addView(h,new LinearLayout.LayoutParams(0,-2,1));
+        Button all=smallPill("Voir le détail");all.setOnClickListener(v->showSection("Dépenses"));hr.addView(all,new LinearLayout.LayoutParams(dp(104),dp(40)));card.addView(hr);
+        JSONArray b=snapshot==null?null:snapshot.optJSONArray("budgets");List<Double> vals=new ArrayList<>();List<String> labels=new ArrayList<>();double sum=0;
+        if(b!=null)for(int i=0;i<b.length()&&i<6;i++){JSONObject x=b.optJSONObject(i);if(x==null)continue;double v=Math.max(0,x.optDouble("spent",0));if(v<=0)continue;vals.add(v);labels.add(x.optString("cat","Autres"));sum+=v;}
+        if(vals.isEmpty()){vals.add(Math.max(1,total));labels.add("Dépenses");sum=Math.max(1,total);}
+        LinearLayout body=horizontal();ExpenseDonutView donut=new ExpenseDonutView(vals,sum,total);body.addView(donut,new LinearLayout.LayoutParams(dp(145),dp(145)));
+        LinearLayout legend=vertical();int[] cs={Color.rgb(51,143,238),Color.rgb(246,53,78),Color.rgb(91,174,100),Color.rgb(255,177,47),Color.rgb(132,79,221),Color.rgb(70,194,120)};
+        for(int i=0;i<vals.size();i++){double pct=sum>0?vals.get(i)/sum*100:0;TextView l=text("● "+labels.get(i)+"  "+Math.round(pct)+"%  "+money(vals.get(i)),9,false);l.setTextColor(cs[i%cs.length]);legend.addView(l);}
+        body.addView(legend,new LinearLayout.LayoutParams(0,-2,1));card.addView(body);content.addView(card);
+    }
+
+    private void renderSettings(){
+        TextView h=text("Paramètres",22,true);h.setTextColor(Color.rgb(7,51,94));content.addView(h);TextView sh=text("Stockage cloud",16,true);sh.setTextColor(Color.rgb(7,51,94));sh.setPadding(0,dp(8),0,dp(4));content.addView(sh);
+        LinearLayout c=softCard(Color.WHITE,Color.rgb(220,229,238));oneDriveLink=input("https://1drv.ms/... ou https://onedrive.live.com/...");oneDriveLink.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(PREF_LINK,""));addLabeled(c,"Lien du dossier OneDrive (optionnel)",oneDriveLink);
+        LinearLayout lr=horizontal();Button save=smallPill("Mémoriser le lien");save.setOnClickListener(v->saveOneDriveLink());lr.addView(save,weight());Button open=smallPill("Ouvrir OneDrive");open.setOnClickListener(v->openOneDriveLink());lr.addView(open,weight());c.addView(lr);
+        Button folder=primaryButton("Choisir dossier OneDrive / Google Drive");folder.setOnClickListener(v->chooseFolder());c.addView(folder,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout fr=horizontal();Button excel=smallPill("Choisir Excel");excel.setOnClickListener(v->chooseWorkbookFile());fr.addView(excel,weight());Button json=smallPill("Choisir vue PC JSON");json.setOnClickListener(v->chooseViewFile());fr.addView(json,weight());c.addView(fr);
+        Button refresh=primaryButton("↻ Actualiser maintenant");refresh.setOnClickListener(v->refreshSnapshot(true));c.addView(refresh,new LinearLayout.LayoutParams(-1,-2));
+        connectionStatus=text((treeUri!=null||workbookUri!=null||viewUri!=null)?"✓ Stockage cloud mémorisé":"Aucun stockage cloud connecté.",12,false);connectionStatus.setTextColor((treeUri!=null||workbookUri!=null||viewUri!=null)?Color.rgb(24,137,91):Color.GRAY);connectionStatus.setPadding(0,dp(8),0,dp(2));c.addView(connectionStatus);
+        syncStatus=text(snapshot==null?"Vue PC non chargée.":"Vue PC : "+snapshot.optString("generatedAt","—")+" • "+snapshot.optString("period","—"),11,false);syncStatus.setTextColor(Color.GRAY);c.addView(syncStatus);content.addView(c);
+    }
+    private void renderMore(){
+        TextView h=text("Plus",22,true);h.setTextColor(Color.rgb(7,51,94));content.addView(h);
+        String[][] items={{"⇄","Transactions","Transactions"},{"◎","Épargne","Épargne"},{"▦","Agenda","Agenda"},{"◔","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"▥","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"}};
+        for(int r=0;r<4;r++){LinearLayout row=horizontal();for(int j=0;j<2;j++){int ix=r*2+j;row.addView(menuTile(items[ix][0],items[ix][1],items[ix][2],false),weight());}content.addView(row);}
+    }
+    private void renderBudgetMobile(){renderArray("budgets",80,x->x.optString("cat","Catégorie"),x->"Réel : "+money(x.optDouble("spent",0))+" • Budget : "+money(x.optDouble("budget",0)));}
+    private void renderGoalsMobile(){renderArray("goals",80,x->x.optString("name","Objectif"),x->"Cible : "+money(x.optDouble("price",0))+" • Épargné : "+money(x.optDouble("saved",0)));}
+    private void renderProjectionMobile(){JSONObject sm=snapshot.optJSONObject("summary");if(sm==null){emptyState("Projection non disponible.");return;}content.addView(kpiCard("Solde projeté",money(sm.optDouble("incomeExpected",0)-sm.optDouble("expensePlanned",0)),"Revenus prévus moins dépenses prévues",true));renderArray("monthlySeries",24,x->x.optString("period",x.optString("month","Période")),x->"Revenus : "+money(x.optDouble("income",x.optDouble("hi",0)+x.optDouble("wi",0)+x.optDouble("ci",0)))+" • Dépenses : "+money(x.optDouble("expense",x.optDouble("he",0)+x.optDouble("we",0)+x.optDouble("ce",0))));}
+    private void renderReportsMobile(){content.addView(infoCard("Rapports","Les rapports complets restent générés sur l'application PC. La vue mobile présente les données synchronisées les plus récentes."));}
+    private LinearLayout softCard(int bg,int stroke){LinearLayout c=vertical();c.setPadding(dp(12),dp(10),dp(12),dp(10));GradientDrawable g=new GradientDrawable();g.setColor(bg);g.setCornerRadius(dp(16));g.setStroke(dp(1),stroke);c.setBackground(g);c.setElevation(dp(1));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(dp(2),dp(5),dp(2),dp(5));c.setLayoutParams(p);return c;}
+    private Button smallPill(String x){Button b=button(x);b.setTextSize(10);b.setTextColor(Color.rgb(18,82,170));b.setPadding(dp(5),dp(3),dp(5),dp(3));GradientDrawable g=new GradientDrawable();g.setColor(Color.rgb(239,246,255));g.setCornerRadius(dp(14));g.setStroke(dp(1),Color.rgb(221,232,246));b.setBackground(g);return b;}
 
     private void addCountSummary(String label, String key) {
         JSONArray a = snapshot.optJSONArray(key);
@@ -744,6 +786,17 @@ public class MainActivity extends Activity {
                 runOnUiThread(()->{saveButton.setEnabled(true);toast("Erreur d'écriture : "+ex.getMessage());});
             }
         }).start();
+    }
+
+    private class ExpenseDonutView extends View{
+        private final List<Double> values;private final double sum;private final double total;private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final int[] colors={Color.rgb(51,143,238),Color.rgb(246,53,78),Color.rgb(91,174,100),Color.rgb(255,177,47),Color.rgb(132,79,221),Color.rgb(70,194,120)};
+        ExpenseDonutView(List<Double> v,double s,double t){super(MainActivity.this);values=v;sum=s;total=t;}
+        @Override protected void onDraw(Canvas c){super.onDraw(c);float w=getWidth(),h=getHeight(),pad=dp(12),size=Math.min(w,h)-2*pad;RectF r=new RectF((w-size)/2,(h-size)/2,(w+size)/2,(h+size)/2);float start=-90;
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(22));p.setStrokeCap(Paint.Cap.BUTT);
+            for(int i=0;i<values.size();i++){float sw=(float)(values.get(i)/Math.max(1,sum)*360.0);p.setColor(colors[i%colors.length]);c.drawArc(r,start,sw,false,p);start+=sw;}
+            p.setStyle(Paint.Style.FILL);p.setColor(Color.rgb(7,45,84));p.setTextAlign(Paint.Align.CENTER);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(dp(12));c.drawText(money(total),w/2,h/2,p);p.setTypeface(Typeface.DEFAULT);p.setTextSize(dp(9));c.drawText("Total",w/2,h/2+dp(16),p);
+        }
     }
 
     private View kpiCard(String title,String value,String sub,boolean positive){
