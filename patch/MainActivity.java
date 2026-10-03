@@ -115,18 +115,16 @@ public class MainActivity extends Activity {
         header.setPadding(dp(14),dp(12),dp(12),dp(12));
         GradientDrawable hg=new GradientDrawable(); hg.setColor(Color.rgb(7,57,103)); header.setBackground(hg);
 
-        TextView menu=text("☰",26,false); menu.setTextColor(Color.WHITE); menu.setGravity(Gravity.CENTER);
-        header.addView(menu,new LinearLayout.LayoutParams(dp(42),dp(52)));
         TextView heart=text("♥",36,true); heart.setTextColor(Color.rgb(255,42,82)); heart.setGravity(Gravity.CENTER);
         header.addView(heart,new LinearLayout.LayoutParams(dp(48),dp(54)));
 
         LinearLayout brand=vertical();
-        TextView title=text("Couple Finance  v2.7",23,true); title.setTextColor(Color.WHITE); brand.addView(title);
+        TextView title=text("Couple Finance  v2.8",23,true); title.setTextColor(Color.WHITE); brand.addView(title);
         TextView sub=text("Consultation et saisies vers PC",11,false); sub.setTextColor(Color.rgb(225,238,250)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
-        TextView bell=text("🔔",24,true); bell.setTextColor(Color.WHITE); bell.setGravity(Gravity.CENTER);
-        bell.setOnClickListener(v->toast("Notifications Couple Finance")); header.addView(bell,new LinearLayout.LayoutParams(dp(46),dp(52)));
+        TextView sync=text("↻",27,true); sync.setTextColor(Color.WHITE); sync.setGravity(Gravity.CENTER);
+        sync.setOnClickListener(v->refreshSnapshot(true)); header.addView(sync,new LinearLayout.LayoutParams(dp(44),dp(52)));
         TextView gear=text("⚙",28,true); gear.setTextColor(Color.WHITE); gear.setGravity(Gravity.CENTER);
         gear.setOnClickListener(v->showSection("Paramètres")); header.addView(gear,new LinearLayout.LayoutParams(dp(48),dp(52)));
         root.addView(header,new LinearLayout.LayoutParams(-1,-2));
@@ -149,7 +147,7 @@ public class MainActivity extends Activity {
         LinearLayout nav=horizontal(); nav.setGravity(Gravity.CENTER); nav.setPadding(dp(4),dp(4),dp(4),dp(4));
         nav.setBackgroundColor(Color.WHITE); nav.setElevation(dp(10));
         nav.addView(bottomButton("⌂","Accueil","Accueil",false),weight());
-        nav.addView(bottomButton("🛒","Dépenses","Dépenses",false),weight());
+        nav.addView(bottomButton("⇄","Mouvements","Mouvements",false),weight());
         nav.addView(bottomButton("＋","Saisie","Saisie",true),weight());
         nav.addView(bottomButton("▣","Comptes","Comptes",false),weight());
         nav.addView(bottomButton("▦","Plus","Plus",false),weight());
@@ -353,6 +351,7 @@ public class MainActivity extends Activity {
         if("Paramètres".equals(section)){renderSettings();return;}
         if("Plus".equals(section)){renderMore();return;}
         if("Historique téléphone".equals(section)){renderPhoneHistory(false);return;}
+        if("Mouvements".equals(section)){renderMovements();return;}
         TextView h=text(section,22,true);h.setTextColor(Color.rgb(7,51,94));h.setPadding(dp(2),dp(8),0,dp(4));content.addView(h);
         if("Saisie".equals(section)){buildEntryForm();return;}
         TextView ro=text("Dépenses".equals(section)?"Lecture seule, sauf l’action Reporter sur une échéance.":"Lecture seule — les données principales proviennent de l'application PC.",11,false);
@@ -402,8 +401,11 @@ public class MainActivity extends Activity {
         mini.addView(summaryTile("◎","Objectifs",String.valueOf(arrayLen("goals")),"Voir la progression","Objectifs"),weight());
         mini.addView(summaryTile("◉","Analyse IA","Conseils","Voir recommandations","Plus"),weight());content.addView(mini);
 
-        String[][] menu={{"⌂","Accueil","Accueil"},{"▣","Comptes","Comptes"},{"●","Revenus","Revenus"},{"🛒","Dépenses","Dépenses"},{"◉","Dettes","Dettes"},{"◔","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"▥","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"}};
-        for(int r=0;r<2;r++){LinearLayout row=horizontal();for(int j=0;j<5;j++){int ix=r*5+j;row.addView(menuTile(menu[ix][0],menu[ix][1],menu[ix][2],ix==0),weight());}content.addView(row);}
+        LinearLayout quick=horizontal();
+        quick.addView(actionTile("＋","Nouvelle saisie","Ajouter un mouvement","Saisie"),weight());
+        quick.addView(actionTile("⇄","Mouvements","Voir l'historique","Mouvements"),weight());
+        quick.addView(actionTile("↻","Synchroniser","Actualiser la vue PC","SYNC"),weight());
+        content.addView(quick);
         renderPhoneHistory(true);renderUpcomingHome();renderExpenseDistributionHome(exp);
     }
 
@@ -462,9 +464,67 @@ public class MainActivity extends Activity {
         connectionStatus=text((treeUri!=null||workbookUri!=null||viewUri!=null)?"✓ Stockage cloud mémorisé":"Aucun stockage cloud connecté.",12,false);connectionStatus.setTextColor((treeUri!=null||workbookUri!=null||viewUri!=null)?Color.rgb(24,137,91):Color.GRAY);connectionStatus.setPadding(0,dp(8),0,dp(2));c.addView(connectionStatus);
         syncStatus=text(snapshot==null?"Vue PC non chargée.":"Vue PC : "+snapshot.optString("generatedAt","—")+" • "+snapshot.optString("period","—"),11,false);syncStatus.setTextColor(Color.GRAY);c.addView(syncStatus);content.addView(c);
     }
+    private View actionTile(String icon,String title,String sub,String section){
+        LinearLayout c=softCard(Color.WHITE,Color.rgb(226,232,240));c.setGravity(Gravity.CENTER);c.setPadding(dp(5),dp(11),dp(5),dp(11));
+        TextView i=text(icon,22,true);i.setGravity(Gravity.CENTER);i.setTextColor(Color.rgb(18,102,210));c.addView(i);
+        TextView t=text(title,10,true);t.setGravity(Gravity.CENTER);t.setTextColor(Color.rgb(7,51,94));c.addView(t);
+        TextView x=text(sub,8,false);x.setGravity(Gravity.CENTER);x.setTextColor(Color.GRAY);c.addView(x);
+        c.setOnClickListener(v->{if("SYNC".equals(section))refreshSnapshot(true);else showSection(section);});return c;
+    }
+
+    private void renderMovements(){
+        TextView h=text("Mouvements",24,true);h.setTextColor(Color.rgb(7,51,94));content.addView(h);
+        TextView sub=text("Toutes les opérations du téléphone et les mouvements synchronisés du PC, regroupés au même endroit.",11,false);sub.setTextColor(Color.GRAY);content.addView(sub);spacer(content,6);
+
+        JSONObject sm=snapshot==null?null:snapshot.optJSONObject("summary");if(sm==null)sm=new JSONObject();
+        LinearLayout totals=horizontal();
+        totals.addView(homeKpi("Revenus",money(sm.optDouble("incomeReceived",0)),"ce mois",Color.rgb(233,245,255),Color.rgb(18,92,190)),weight());
+        totals.addView(homeKpi("Dépenses",money(sm.optDouble("expenseActual",0)),"ce mois",Color.rgb(255,238,242),Color.rgb(190,31,53)),weight());
+        content.addView(totals);
+
+        LinearLayout actions=horizontal();
+        actions.addView(actionTile("＋","Nouvelle saisie","Dépense, revenu, paiement","Saisie"),weight());
+        actions.addView(actionTile("−","Échéances","Charges du mois","Dépenses"),weight());
+        actions.addView(actionTile("↻","Actualiser","Vue PC","SYNC"),weight());
+        content.addView(actions);
+
+        renderPhoneHistory(true);
+        if(snapshot==null){
+            content.addView(infoCard("Données PC non chargées","Les mouvements du téléphone restent disponibles. Connecte/actualise la vue PC pour afficher aussi les transactions synchronisées."));
+            return;
+        }
+
+        content.addView(sectionLabel("Dernières transactions synchronisées"));
+        JSONArray tx=snapshot.optJSONArray("transactions");
+        if(tx==null||tx.length()==0){TextView e=text("Aucune transaction PC disponible.",11,false);e.setTextColor(Color.GRAY);content.addView(e);}
+        else{
+            int shown=0;
+            for(int i=tx.length()-1;i>=0&&shown<12;i--,shown++){
+                JSONObject x=tx.optJSONObject(i);if(x==null)continue;double amt=x.optDouble("amount",0);
+                String title=x.optString("date","")+" • "+x.optString("desc","Transaction");
+                String body=x.optString("owner","Commun")+" • "+x.optString("cat","Autres")+" • "+x.optString("operation",x.optString("type","Transaction"))+
+                    "\n"+(amt<0?"− ":"+ ")+money(Math.abs(amt));
+                content.addView(infoCard(title,body));
+            }
+        }
+
+        content.addView(sectionLabel("Revenus récents"));
+        JSONArray inc=snapshot.optJSONArray("incomeEntries");
+        if(inc==null||inc.length()==0){TextView e=text("Aucun revenu synchronisé.",11,false);e.setTextColor(Color.GRAY);content.addView(e);}
+        else{
+            int shown=0;
+            for(int i=inc.length()-1;i>=0&&shown<8;i--,shown++){
+                JSONObject x=inc.optJSONObject(i);if(x==null)continue;
+                content.addView(infoCard(x.optString("date","")+" • "+x.optString("sourceName",x.optString("source","Revenu")),
+                    x.optString("owner","Commun")+" • + "+money(x.optDouble("amount",0))+" • "+x.optString("status","")));
+            }
+        }
+    }
+
     private void renderMore(){
         TextView h=text("Plus",22,true);h.setTextColor(Color.rgb(7,51,94));content.addView(h);
-        String[][] items={{"☷","Historique téléphone","Historique téléphone"},{"⇄","Transactions","Transactions"},{"◎","Épargne","Épargne"},{"▦","Agenda","Agenda"},{"◔","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"▥","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"},{"＋","Nouvelle saisie","Saisie"}};
+        TextView sub=text("Outils et vues détaillées",11,false);sub.setTextColor(Color.GRAY);content.addView(sub);spacer(content,6);
+        String[][] items={{"●","Revenus","Revenus"},{"−","Dépenses & échéances","Dépenses"},{"◉","Dettes","Dettes"},{"◎","Épargne","Épargne"},{"▦","Agenda","Agenda"},{"◔","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"▥","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"}};
         for(int r=0;r<5;r++){LinearLayout row=horizontal();for(int j=0;j<2;j++){int ix=r*2+j;row.addView(menuTile(items[ix][0],items[ix][1],items[ix][2],false),weight());}content.addView(row);}
     }
     private void renderBudgetMobile(){renderArray("budgets",80,x->x.optString("cat","Catégorie"),x->"Réel : "+money(x.optDouble("spent",0))+" • Budget : "+money(x.optDouble("budget",0)));}
