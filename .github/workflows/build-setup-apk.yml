@@ -15,6 +15,7 @@ jobs:
         run: |
           unzip -q project.zip -d extracted
           cp patch/MainActivity.java extracted/CoupleFinance_Mobile_Android_V2_VIEWER/app/src/main/java/com/couplefinance/mobile/MainActivity.java
+          cp patch/XlsxAppender.java extracted/CoupleFinance_Mobile_Android_V2_VIEWER/app/src/main/java/com/couplefinance/mobile/XlsxAppender.java
 
       - uses: actions/setup-java@v4
         with:
