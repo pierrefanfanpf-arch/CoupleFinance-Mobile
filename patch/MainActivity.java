@@ -51,6 +51,7 @@ public class MainActivity extends Activity {
     private static final String PREF_WORKBOOK = "onedrive_workbook_uri";
     private static final String PREF_VIEW = "onedrive_view_uri";
     private static final String PREF_LINK = "onedrive_folder_link";
+    private static final String PREF_PHONE_HISTORY = "phone_movement_history_v1";
     private static final String WORKBOOK_NAME = "CoupleFinance_Mobile.xlsx";
     private static final String VIEW_NAME = "CoupleFinance_Mobile_View.json";
 
@@ -120,7 +121,7 @@ public class MainActivity extends Activity {
         header.addView(heart,new LinearLayout.LayoutParams(dp(48),dp(54)));
 
         LinearLayout brand=vertical();
-        TextView title=text("Couple Finance  v2.6",23,true); title.setTextColor(Color.WHITE); brand.addView(title);
+        TextView title=text("Couple Finance  v2.7",23,true); title.setTextColor(Color.WHITE); brand.addView(title);
         TextView sub=text("Consultation et saisies vers PC",11,false); sub.setTextColor(Color.rgb(225,238,250)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
@@ -351,6 +352,7 @@ public class MainActivity extends Activity {
         if("Accueil".equals(section)){renderHome();return;}
         if("Paramètres".equals(section)){renderSettings();return;}
         if("Plus".equals(section)){renderMore();return;}
+        if("Historique téléphone".equals(section)){renderPhoneHistory(false);return;}
         TextView h=text(section,22,true);h.setTextColor(Color.rgb(7,51,94));h.setPadding(dp(2),dp(8),0,dp(4));content.addView(h);
         if("Saisie".equals(section)){buildEntryForm();return;}
         TextView ro=text("Dépenses".equals(section)?"Lecture seule, sauf l’action Reporter sur une échéance.":"Lecture seule — les données principales proviennent de l'application PC.",11,false);
@@ -402,7 +404,7 @@ public class MainActivity extends Activity {
 
         String[][] menu={{"⌂","Accueil","Accueil"},{"▣","Comptes","Comptes"},{"●","Revenus","Revenus"},{"🛒","Dépenses","Dépenses"},{"◉","Dettes","Dettes"},{"◔","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"▥","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"}};
         for(int r=0;r<2;r++){LinearLayout row=horizontal();for(int j=0;j<5;j++){int ix=r*5+j;row.addView(menuTile(menu[ix][0],menu[ix][1],menu[ix][2],ix==0),weight());}content.addView(row);}
-        renderUpcomingHome();renderExpenseDistributionHome(exp);
+        renderPhoneHistory(true);renderUpcomingHome();renderExpenseDistributionHome(exp);
     }
 
     private int arrayLen(String key){JSONArray a=snapshot==null?null:snapshot.optJSONArray(key);return a==null?0:a.length();}
@@ -462,8 +464,8 @@ public class MainActivity extends Activity {
     }
     private void renderMore(){
         TextView h=text("Plus",22,true);h.setTextColor(Color.rgb(7,51,94));content.addView(h);
-        String[][] items={{"⇄","Transactions","Transactions"},{"◎","Épargne","Épargne"},{"▦","Agenda","Agenda"},{"◔","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"▥","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"}};
-        for(int r=0;r<4;r++){LinearLayout row=horizontal();for(int j=0;j<2;j++){int ix=r*2+j;row.addView(menuTile(items[ix][0],items[ix][1],items[ix][2],false),weight());}content.addView(row);}
+        String[][] items={{"☷","Historique téléphone","Historique téléphone"},{"⇄","Transactions","Transactions"},{"◎","Épargne","Épargne"},{"▦","Agenda","Agenda"},{"◔","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"▥","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"},{"＋","Nouvelle saisie","Saisie"}};
+        for(int r=0;r<5;r++){LinearLayout row=horizontal();for(int j=0;j<2;j++){int ix=r*2+j;row.addView(menuTile(items[ix][0],items[ix][1],items[ix][2],false),weight());}content.addView(row);}
     }
     private void renderBudgetMobile(){renderArray("budgets",80,x->x.optString("cat","Catégorie"),x->"Réel : "+money(x.optDouble("spent",0))+" • Budget : "+money(x.optDouble("budget",0)));}
     private void renderGoalsMobile(){renderArray("goals",80,x->x.optString("name","Objectif"),x->"Cible : "+money(x.optDouble("price",0))+" • Épargné : "+money(x.optDouble("saved",0)));}
@@ -576,7 +578,7 @@ public class MainActivity extends Activity {
         new Thread(()->{
             try{
                 XlsxAppender.append(getContentResolver(),workbookUri,e);
-                runOnUiThread(()->toast("Report envoyé au PC pour le "+newDate+"."));
+                runOnUiThread(()->{recordPhoneMovement(e,"Envoyé vers Excel");toast("Report envoyé au PC pour le "+newDate+".");});
             }catch(Exception ex){runOnUiThread(()->toast("Erreur d'écriture : "+ex.getMessage()));}
         }).start();
     }
@@ -786,6 +788,76 @@ public class MainActivity extends Activity {
                 runOnUiThread(()->{saveButton.setEnabled(true);toast("Erreur d'écriture : "+ex.getMessage());});
             }
         }).start();
+    }
+
+    private JSONArray loadPhoneHistory(){
+        try{
+            String raw=getSharedPreferences(PREFS,MODE_PRIVATE).getString(PREF_PHONE_HISTORY,"[]");
+            return new JSONArray(raw==null||raw.trim().isEmpty()?"[]":raw);
+        }catch(Exception e){return new JSONArray();}
+    }
+
+    private void recordPhoneMovement(XlsxAppender.Entry e,String status){
+        try{
+            JSONArray old=loadPhoneHistory();JSONArray out=new JSONArray();
+            JSONObject x=new JSONObject();
+            x.put("savedAt",new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.CANADA_FRENCH).format(new Date()));
+            x.put("date",e.date);x.put("time",e.time);x.put("owner",e.owner);x.put("type",e.type);
+            x.put("amount",e.amount);x.put("category",e.category);x.put("description",e.description);
+            x.put("account",e.account);x.put("note",e.note);x.put("status",status);
+            out.put(x);
+            for(int i=0;i<old.length()&&i<249;i++)out.put(old.opt(i));
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(PREF_PHONE_HISTORY,out.toString()).apply();
+        }catch(Exception ignored){}
+    }
+
+    private void renderPhoneHistory(boolean compact){
+        JSONArray a=loadPhoneHistory();
+        LinearLayout box=softCard(Color.WHITE,Color.rgb(226,232,240));
+        LinearLayout hr=horizontal();hr.setGravity(Gravity.CENTER_VERTICAL);
+        TextView h=text(compact?"Mouvements faits depuis le téléphone":"Historique des mouvements téléphone",compact?17:22,true);
+        h.setTextColor(Color.rgb(7,51,94));hr.addView(h,new LinearLayout.LayoutParams(0,-2,1));
+        if(compact){Button all=smallPill("Voir tout ›");all.setOnClickListener(v->showSection("Historique téléphone"));hr.addView(all,new LinearLayout.LayoutParams(dp(92),dp(40)));}
+        else{Button clear=smallPill("Effacer l'historique");clear.setOnClickListener(v->{getSharedPreferences(PREFS,MODE_PRIVATE).edit().remove(PREF_PHONE_HISTORY).apply();showSection("Historique téléphone");toast("Historique local effacé.");});hr.addView(clear,new LinearLayout.LayoutParams(dp(126),dp(40)));}
+        box.addView(hr);
+
+        TextView hint=text("Historique local du téléphone • conservé même après fermeture de l'application",10,false);hint.setTextColor(Color.GRAY);box.addView(hint);
+        if(a.length()==0){
+            TextView e=text("Aucun mouvement saisi depuis ce téléphone.",11,false);e.setTextColor(Color.GRAY);e.setPadding(0,dp(10),0,dp(8));box.addView(e);
+        }else{
+            int limit=compact?4:Math.min(250,a.length());
+            for(int i=0;i<limit;i++){
+                JSONObject x=a.optJSONObject(i);if(x==null)continue;
+                LinearLayout row=horizontal();row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(8),0,dp(8));
+                TextView icon=text(phoneMovementIcon(x.optString("type","")),20,true);icon.setGravity(Gravity.CENTER);icon.setTextColor(Color.rgb(18,102,210));row.addView(icon,new LinearLayout.LayoutParams(dp(38),dp(46)));
+                LinearLayout info=vertical();
+                String desc=x.optString("description",x.optString("type","Mouvement"));
+                TextView t=text(desc,12,true);t.setTextColor(Color.rgb(7,45,84));info.addView(t);
+                String meta=x.optString("date","")+" "+x.optString("time","")+" • "+x.optString("owner","Commun")+" • "+x.optString("category","");
+                TextView m=text(meta,9,false);m.setTextColor(Color.GRAY);info.addView(m);
+                String acc=x.optString("account","");if(!acc.isEmpty()){TextView ac=text(acc,9,false);ac.setTextColor(Color.rgb(83,100,120));info.addView(ac);}
+                row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+                LinearLayout right=vertical();right.setGravity(Gravity.RIGHT);
+                double amt=x.optDouble("amount",0);String typ=x.optString("type","");
+                TextView val=text(("Revenu".equals(typ)?"+ ":"")+(amt>0?money(amt):"—"),11,true);val.setGravity(Gravity.RIGHT);val.setTextColor("Revenu".equals(typ)?Color.rgb(20,120,58):Color.rgb(7,45,84));right.addView(val);
+                TextView st=text("✓ "+x.optString("status","Enregistré"),8,true);st.setGravity(Gravity.RIGHT);st.setTextColor(Color.rgb(20,120,58));right.addView(st);
+                row.addView(right,new LinearLayout.LayoutParams(dp(108),-2));box.addView(row);
+            }
+        }
+        content.addView(box);
+        if(!compact){
+            TextView note=text("Cet historique affiche uniquement les mouvements créés sur ce téléphone. Les opérations provenant du PC restent dans les pages Transactions et Dépenses.",10,false);
+            note.setTextColor(Color.GRAY);note.setPadding(dp(3),dp(6),dp(3),dp(12));content.addView(note);
+        }
+    }
+
+    private String phoneMovementIcon(String type){
+        if("Revenu".equals(type))return "＋";
+        if("Remboursement crédit".equals(type))return "▣";
+        if("Épargne".equals(type))return "◎";
+        if("Reporter paiement".equals(type))return "▦";
+        if("Événement".equals(type))return "◷";
+        return "−";
     }
 
     private class ExpenseDonutView extends View{
