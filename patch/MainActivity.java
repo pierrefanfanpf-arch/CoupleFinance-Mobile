@@ -109,7 +109,7 @@ public class MainActivity extends Activity {
         outer.setBackgroundColor(Color.rgb(247,249,252));
         outer.addView(root);
 
-        TextView title = text("♥ Couple Finance 2.4", 24, true);
+        TextView title = text("♥ Couple Finance 2.5", 24, true);
         title.setTextColor(Color.rgb(7, 51, 94));
         title.setPadding(dp(4),dp(6),dp(4),dp(2));
         root.addView(title);
@@ -738,7 +738,7 @@ public class MainActivity extends Activity {
                 XlsxAppender.append(getContentResolver(),workbookUri,e);
                 runOnUiThread(()->{
                     saveButton.setEnabled(true);amount.setText("");description.setText("");note.setText("");time.setText(hmTime());
-                    toast("Enregistré dans OneDrive. Couple Finance PC l'importera.");
+                    toast("Saisie enregistrée. Couple Finance PC l'importera.");
                 });
             }catch(Exception ex){
                 runOnUiThread(()->{saveButton.setEnabled(true);toast("Erreur d'écriture : "+ex.getMessage());});
