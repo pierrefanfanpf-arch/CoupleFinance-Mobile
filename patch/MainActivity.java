@@ -122,7 +122,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.11",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.12",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -137,14 +137,17 @@ public class MainActivity extends Activity {
         root.addView(pageScroll,new LinearLayout.LayoutParams(-1,0,1));
         View bottomNav=buildBottomNav();
         root.addView(bottomNav,new LinearLayout.LayoutParams(-1,dp(72)));
-        root.setOnApplyWindowInsetsListener((v,insets)->{
-            int bottom=0;
-            if(android.os.Build.VERSION.SDK_INT>=30)bottom=insets.getInsets(WindowInsets.Type.navigationBars()).bottom;
+        bottomNav.setOnApplyWindowInsetsListener((v,insets)->{
+            int bottom;
+            if(android.os.Build.VERSION.SDK_INT>=30) bottom=insets.getInsets(WindowInsets.Type.navigationBars()).bottom;
             else bottom=insets.getSystemWindowInsetBottom();
-            v.setPadding(v.getPaddingLeft(),v.getPaddingTop(),v.getPaddingRight(),bottom);
+            v.setPadding(dp(4),dp(4),dp(4),dp(4)+bottom);
+            android.view.ViewGroup.LayoutParams lp=v.getLayoutParams();
+            lp.height=dp(72)+bottom;
+            v.setLayoutParams(lp);
             return insets;
         });
-        root.requestApplyInsets();
+        bottomNav.requestApplyInsets();
 
         connectionStatus=text("Aucun stockage cloud connecté.",12,false);
         syncStatus=text("",11,false);
