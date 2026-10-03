@@ -108,7 +108,7 @@ public class MainActivity extends Activity {
         root.setPadding(dp(14), dp(12), dp(14), dp(30));
         outer.addView(root);
 
-        TextView title = text("♥ Couple Finance Mobile 2.2", 24, true);
+        TextView title = text("♥ Couple Finance Mobile 2.3", 24, true);
         title.setTextColor(Color.rgb(7, 51, 94));
         root.addView(title);
 
@@ -133,7 +133,7 @@ public class MainActivity extends Activity {
         root.addView(linkRow);
 
         LinearLayout connectRow = horizontal();
-        Button connect = button("Choisir dossier");
+        Button connect = button("Choisir dossier OneDrive / Google Drive");
         connect.setOnClickListener(v -> chooseFolder());
         connectRow.addView(connect, weight());
         Button refresh = button("Actualiser");
@@ -142,20 +142,20 @@ public class MainActivity extends Activity {
         root.addView(connectRow);
 
         LinearLayout fileRow = horizontal();
-        Button chooseWorkbook = button("Choisir Excel OneDrive");
+        Button chooseWorkbook = button("Choisir Excel OneDrive / Google Drive");
         chooseWorkbook.setOnClickListener(v -> chooseWorkbookFile());
         fileRow.addView(chooseWorkbook, weight());
-        Button chooseView = button("Choisir vue PC JSON");
+        Button chooseView = button("Choisir vue PC JSON (OneDrive / Google Drive)");
         chooseView.setOnClickListener(v -> chooseViewFile());
         fileRow.addView(chooseView, weight());
         root.addView(fileRow);
 
-        TextView help = text("Si OneDrive n'apparaît pas dans « Choisir dossier », colle le lien OneDrive ci-dessus, ouvre-le, puis sélectionne les deux fichiers individuellement.", 11, false);
+        TextView help = text("Stockage cloud : OneDrive ou Google Drive. Avec Google Drive, utilise directement les boutons Choisir dossier / Excel / JSON et sélectionne ton compte Google Drive. Avec OneDrive, tu peux aussi mémoriser et ouvrir le lien du dossier.", 11, false);
         help.setTextColor(Color.GRAY);
         help.setPadding(0, dp(4), 0, dp(4));
         root.addView(help);
 
-        connectionStatus = text("Aucune source OneDrive connectée.", 12, false);
+        connectionStatus = text("Aucun stockage cloud connecté.", 12, false);
         connectionStatus.setPadding(dp(8), dp(8), dp(8), dp(8));
         root.addView(connectionStatus);
 
@@ -234,16 +234,16 @@ public class MainActivity extends Activity {
         if (req == PICK_FOLDER) {
             treeUri = uri; ed.putString(PREF_TREE, uri.toString()).apply();
             try { locateFiles(); ensureWorkbook(); refreshSnapshot(true); }
-            catch (Exception e) { setConnection(false, "Erreur OneDrive : " + e.getMessage()); }
+            catch (Exception e) { setConnection(false, "Erreur stockage cloud : " + e.getMessage()); }
             return;
         }
         if (req == PICK_WORKBOOK) {
             workbookUri = uri; ed.putString(PREF_WORKBOOK, uri.toString()).apply();
-            setConnection(true, "Excel OneDrive sélectionné."); toast("Fichier Excel mémorisé."); return;
+            setConnection(true, "Excel cloud sélectionné."); toast("Fichier Excel cloud mémorisé."); return;
         }
         if (req == PICK_VIEW) {
             viewUri = uri; ed.putString(PREF_VIEW, uri.toString()).apply();
-            setConnection(true, "Vue PC OneDrive sélectionnée."); refreshSnapshot(true);
+            setConnection(true, "Vue PC cloud sélectionnée."); refreshSnapshot(true);
         }
     }
 
@@ -258,8 +258,8 @@ public class MainActivity extends Activity {
             if (treeUri != null) locateFiles();
             if (treeUri != null && workbookUri == null) ensureWorkbook();
             if (viewUri != null || treeUri != null) refreshSnapshot(false);
-            else if (workbookUri != null) setConnection(true, "Excel OneDrive mémorisé. Choisis maintenant la vue PC JSON.");
-        } catch (Exception e) { setConnection(false, "Connexion mémorisée inaccessible : " + e.getMessage()); }
+            else if (workbookUri != null) setConnection(true, "Excel cloud mémorisé. Choisis maintenant la vue PC JSON.");
+        } catch (Exception e) { setConnection(false, "Stockage cloud mémorisé inaccessible : " + e.getMessage()); }
     }
 
     private Uri treeDocumentUri() {
@@ -272,7 +272,7 @@ public class MainActivity extends Activity {
         Uri wb = findChild(WORKBOOK_NAME), vw = findChild(VIEW_NAME);
         if (wb != null) workbookUri = wb;
         if (vw != null) viewUri = vw;
-        setConnection(true, "Dossier OneDrive connecté.");
+        setConnection(true, "Dossier cloud connecté.");
     }
 
     private Uri findChild(String name) throws Exception {
@@ -502,7 +502,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean ensureWorkbookForWrite() {
-        if(treeUri==null && workbookUri==null){toast("Choisis d'abord le fichier Excel OneDrive.");return false;}
+        if(treeUri==null && workbookUri==null){toast("Choisis d'abord le fichier Excel OneDrive ou Google Drive.");return false;}
         try{
             if(treeUri!=null){locateFiles();if(workbookUri==null)ensureWorkbook();}
             if(workbookUri==null)throw new Exception("CoupleFinance_Mobile.xlsx n'est pas sélectionné.");
