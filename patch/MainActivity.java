@@ -105,23 +105,27 @@ public class MainActivity extends Activity {
     private View buildShell() {
         ScrollView outer = new ScrollView(this);
         root = vertical();
-        root.setPadding(dp(14), dp(12), dp(14), dp(30));
+        root.setPadding(dp(16), dp(16), dp(16), dp(96));
+        outer.setBackgroundColor(Color.rgb(247,249,252));
         outer.addView(root);
 
-        TextView title = text("♥ Couple Finance Mobile 2.3", 24, true);
+        TextView title = text("♥ Couple Finance 2.4", 24, true);
         title.setTextColor(Color.rgb(7, 51, 94));
+        title.setPadding(dp(4),dp(6),dp(4),dp(2));
         root.addView(title);
 
-        TextView sub = text("Consultation lecture seule + saisies vers Couple Finance PC", 12, false);
+        TextView sub = text("Tableau de bord • Consultation et saisie", 12, false);
         sub.setTextColor(Color.DKGRAY);
         root.addView(sub);
         spacer(root, 10);
 
+        LinearLayout cloudCard=cardBox();
+        TextView cloudTitle=text("☁  Stockage cloud",16,true);cloudTitle.setTextColor(Color.rgb(7,51,94));cloudCard.addView(cloudTitle);
         TextView linkLabel = text("Lien du dossier OneDrive (optionnel)", 12, true);
-        root.addView(linkLabel);
+        cloudCard.addView(linkLabel);
         oneDriveLink = input("https://1drv.ms/... ou https://onedrive.live.com/...");
         oneDriveLink.setText(getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_LINK, ""));
-        root.addView(oneDriveLink, new LinearLayout.LayoutParams(-1, -2));
+        cloudCard.addView(oneDriveLink, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout linkRow = horizontal();
         Button saveLink = button("Mémoriser le lien");
@@ -130,7 +134,7 @@ public class MainActivity extends Activity {
         Button openLink = button("Ouvrir OneDrive");
         openLink.setOnClickListener(v -> openOneDriveLink());
         linkRow.addView(openLink, weight());
-        root.addView(linkRow);
+        cloudCard.addView(linkRow);
 
         LinearLayout connectRow = horizontal();
         Button connect = button("Choisir dossier OneDrive / Google Drive");
@@ -139,7 +143,7 @@ public class MainActivity extends Activity {
         Button refresh = button("Actualiser");
         refresh.setOnClickListener(v -> refreshSnapshot(true));
         connectRow.addView(refresh, weight());
-        root.addView(connectRow);
+        cloudCard.addView(connectRow);
 
         LinearLayout fileRow = horizontal();
         Button chooseWorkbook = button("Choisir Excel OneDrive / Google Drive");
@@ -148,33 +152,39 @@ public class MainActivity extends Activity {
         Button chooseView = button("Choisir vue PC JSON (OneDrive / Google Drive)");
         chooseView.setOnClickListener(v -> chooseViewFile());
         fileRow.addView(chooseView, weight());
-        root.addView(fileRow);
+        cloudCard.addView(fileRow);
 
         TextView help = text("Stockage cloud : OneDrive ou Google Drive. Avec Google Drive, utilise directement les boutons Choisir dossier / Excel / JSON et sélectionne ton compte Google Drive. Avec OneDrive, tu peux aussi mémoriser et ouvrir le lien du dossier.", 11, false);
         help.setTextColor(Color.GRAY);
         help.setPadding(0, dp(4), 0, dp(4));
-        root.addView(help);
+        cloudCard.addView(help);
 
         connectionStatus = text("Aucun stockage cloud connecté.", 12, false);
         connectionStatus.setPadding(dp(8), dp(8), dp(8), dp(8));
-        root.addView(connectionStatus);
+        cloudCard.addView(connectionStatus);
 
         syncStatus = text("", 11, false);
         syncStatus.setTextColor(Color.GRAY);
-        root.addView(syncStatus);
-        spacer(root, 8);
+        cloudCard.addView(syncStatus);
+        root.addView(cloudCard);
+        spacer(root, 10);
 
-        HorizontalScrollView navScroll = new HorizontalScrollView(this);
-        navScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout nav = horizontal();
-        for (String s : sections) {
-            Button b = smallNavButton(s);
-            b.setOnClickListener(v -> showSection(((Button)v).getText().toString()));
-            nav.addView(b);
-        }
-        navScroll.addView(nav);
-        root.addView(navScroll);
-        spacer(root, 8);
+        LinearLayout quick1=horizontal();
+        String[] q1={"⌂ Accueil","▣ Comptes","$ Revenus"};
+        String[] q1s={"Accueil","Comptes","Revenus"};
+        for(int i=0;i<q1.length;i++){Button b=modernNavButton(q1[i]);final String sec=q1s[i];b.setOnClickListener(v->showSection(sec));quick1.addView(b,weight());}
+        root.addView(quick1);
+        LinearLayout quick2=horizontal();
+        String[] q2={"− Dépenses","▤ Dettes","＋ Saisie"};
+        String[] q2s={"Dépenses","Dettes","Saisie"};
+        for(int i=0;i<q2.length;i++){Button b=modernNavButton(q2[i]);final String sec=q2s[i];b.setOnClickListener(v->showSection(sec));quick2.addView(b,weight());}
+        root.addView(quick2);
+        LinearLayout quick3=horizontal();
+        String[] q3={"⇄ Transactions","◎ Épargne","▦ Agenda"};
+        String[] q3s={"Transactions","Épargne","Agenda"};
+        for(int i=0;i<q3.length;i++){Button b=modernNavButton(q3[i]);final String sec=q3s[i];b.setOnClickListener(v->showSection(sec));quick3.addView(b,weight());}
+        root.addView(quick3);
+        spacer(root, 10);
 
         content = vertical();
         root.addView(content);
@@ -371,8 +381,8 @@ public class MainActivity extends Activity {
         currentSection = section;
         if (content == null) return;
         content.removeAllViews();
-        TextView h = text(section, 20, true);
-        h.setTextColor(Color.rgb(7,51,94));
+        TextView h = text(section, 22, true);
+        h.setTextColor(Color.rgb(7,51,94));h.setPadding(dp(2),dp(8),0,dp(4));
         content.addView(h);
 
         if ("Saisie".equals(section)) {
@@ -403,6 +413,11 @@ public class MainActivity extends Activity {
     }
 
     private void renderHome() {
+        LinearLayout write=cardBox();
+        TextView wt=text("＋ Nouvelle saisie",17,true);wt.setTextColor(Color.rgb(18,102,210));write.addView(wt);
+        TextView ws=text("Ajouter une dépense, un revenu, une transaction, un remboursement de crédit, une épargne ou un événement.",12,false);ws.setTextColor(Color.DKGRAY);ws.setPadding(0,dp(4),0,dp(7));write.addView(ws);
+        Button wb=primaryButton("Écrire maintenant");wb.setOnClickListener(v->showSection("Saisie"));write.addView(wb,new LinearLayout.LayoutParams(-1,-2));
+        content.addView(write);
         JSONObject s = snapshot.optJSONObject("summary");
         if (s == null) s = new JSONObject();
         content.addView(kpiCard("Revenus reçus à date", money(s.optDouble("incomeReceived",0)), "À recevoir ce mois : " + money(s.optDouble("incomeExpected",0)), true));
@@ -651,8 +666,8 @@ public class MainActivity extends Activity {
             public void onNothingSelected(android.widget.AdapterView<?> p){}
         });
 
-        saveButton=button("Enregistrer dans Couple Finance");
-        saveButton.setTextColor(Color.WHITE);saveButton.setBackgroundColor(Color.rgb(24,137,91));saveButton.setTextSize(16);saveButton.setPadding(dp(10),dp(14),dp(10),dp(14));
+        saveButton=primaryButton("✓ Enregistrer la saisie");
+        saveButton.setTextSize(16);saveButton.setPadding(dp(10),dp(16),dp(10),dp(16));
         saveButton.setOnClickListener(v->saveEntry());
         content.addView(saveButton,new LinearLayout.LayoutParams(-1,-2));
     }
@@ -750,10 +765,18 @@ public class MainActivity extends Activity {
 
     private LinearLayout cardBox(){
         LinearLayout c=vertical();c.setPadding(dp(12),dp(10),dp(12),dp(10));
-        GradientDrawable g=new GradientDrawable();g.setColor(Color.WHITE);g.setCornerRadius(dp(10));g.setStroke(dp(1),Color.rgb(218,229,239));c.setBackground(g);
+        GradientDrawable g=new GradientDrawable();g.setColor(Color.WHITE);g.setCornerRadius(dp(18));g.setStroke(dp(1),Color.rgb(225,232,240));c.setBackground(g);c.setElevation(dp(2));
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,dp(5),0,dp(5));c.setLayoutParams(p);return c;
     }
     private Button smallNavButton(String s){Button b=button(s);b.setTextSize(12);b.setPadding(dp(10),dp(5),dp(10),dp(5));return b;}
+    private Button modernNavButton(String s){
+        Button b=button(s);b.setTextSize(12);b.setTextColor(Color.rgb(7,51,94));b.setTypeface(null,Typeface.BOLD);b.setPadding(dp(6),dp(13),dp(6),dp(13));
+        GradientDrawable g=new GradientDrawable();g.setColor(Color.WHITE);g.setCornerRadius(dp(14));g.setStroke(dp(1),Color.rgb(220,229,238));b.setBackground(g);b.setElevation(dp(1));return b;
+    }
+    private Button primaryButton(String s){
+        Button b=button(s);b.setTextColor(Color.WHITE);b.setTypeface(null,Typeface.BOLD);
+        GradientDrawable g=new GradientDrawable();g.setColor(Color.rgb(18,102,210));g.setCornerRadius(dp(14));b.setBackground(g);b.setElevation(dp(2));return b;
+    }
     private String money(double n){return String.format(Locale.CANADA_FRENCH,"%,.2f $",n).replace('\u00A0',' ');}
     private String fmt(double n){return String.format(Locale.CANADA_FRENCH,"%.2f",n);}
     private void pickDate(){final Calendar c=Calendar.getInstance();new DatePickerDialog(this,(v,y,m,d)->date.setText(String.format(Locale.CANADA_FRENCH,"%04d-%02d-%02d",y,m+1,d)),c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show();}
