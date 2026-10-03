@@ -67,6 +67,7 @@ public class MainActivity extends Activity {
     private TextView syncStatus;
     private EditText oneDriveLink;
     private String currentSection = "Accueil";
+    private String movementFilter = "Téléphone";
 
     private Spinner entryType, owner, category, sourceAccount, destinationAccount, debtAccount;
     private EditText amount, date, time, description, note;
@@ -120,7 +121,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.9",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.10",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -406,7 +407,7 @@ public class MainActivity extends Activity {
         GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(12));c.setBackground(g);c.setElevation(dp(2));
         TextView i=text(icon,19,true);i.setTextColor(Color.WHITE);i.setGravity(Gravity.CENTER);c.addView(i);
         TextView t=text(label,9,true);t.setTextColor(Color.WHITE);t.setGravity(Gravity.CENTER);c.addView(t);
-        c.setOnClickListener(v->{showSection("Saisie");if(entryType!=null){int p=typeIndex;if(p>=entryType.getCount())p=0;entryType.setSelection(p);}});return c;
+        c.setOnClickListener(v->{showSection("Saisie");selectEntryType(typeIndex);});return c;
     }
 
     private View progressLine(double pct,int color){
@@ -483,19 +484,26 @@ public class MainActivity extends Activity {
 
     private void renderMovements(){
         screenTitle("Mouvements");
-        LinearLayout filters=horizontal();
-        filters.addView(filterChip("Tous",false),weight());filters.addView(filterChip("Téléphone",true),weight());
-        filters.addView(filterChip("PC",false),weight());filters.addView(filterChip("Dépenses",false),weight());filters.addView(filterChip("Revenus",false),weight());
-        content.addView(filters);
+        LinearLayout filters=horizontal();String[] names={"Tous","Téléphone","PC","Dépenses","Revenus"};
+        for(String name:names)filters.addView(movementFilterChip(name),weight());content.addView(filters);
         LinearLayout note=softCard(Color.rgb(242,248,253),Color.rgb(218,230,240));
-        TextView n=text("ⓘ Historique des mouvements saisis depuis le téléphone. Les données sont synchronisées avec le fichier Excel.",10,false);n.setTextColor(Color.rgb(73,91,108));note.addView(n);content.addView(note);
-        renderPhoneHistory(false);
-        if(snapshot!=null){
-            content.addView(sectionLabel("Mouvements synchronisés du PC"));
-            JSONArray tx=snapshot.optJSONArray("transactions");int shown=0;
-            if(tx!=null)for(int i=tx.length()-1;i>=0&&shown<15;i--,shown++){JSONObject x=tx.optJSONObject(i);if(x==null)continue;
-                content.addView(movementRow(x.optString("date",""),x.optString("desc","Transaction"),x.optString("cat",""),x.optDouble("amount",0),"PC"));}
+        TextView n=text("ⓘ Filtre actif : "+movementFilter+" • historique téléphone enregistré après écriture Excel réussie.",10,false);n.setTextColor(Color.rgb(73,91,108));note.addView(n);content.addView(note);
+        if(!"PC".equals(movementFilter))renderPhoneHistoryFiltered(movementFilter);
+        if(!"Téléphone".equals(movementFilter)&&snapshot!=null){
+            content.addView(sectionLabel("Mouvements synchronisés du PC"));JSONArray tx=snapshot.optJSONArray("transactions");int shown=0;
+            if(tx!=null)for(int i=tx.length()-1;i>=0&&shown<30;i--){JSONObject x=tx.optJSONObject(i);if(x==null)continue;double amt=x.optDouble("amount",0);String typ=x.optString("operation",x.optString("type",""));boolean income=amt>0||"Revenu".equalsIgnoreCase(typ);
+                if("Dépenses".equals(movementFilter)&&income)continue;if("Revenus".equals(movementFilter)&&!income)continue;
+                content.addView(movementRow(x.optString("date",""),x.optString("desc","Transaction"),x.optString("cat",""),amt,"PC"));shown++;}
         }
+    }
+    private View movementFilterChip(String label){TextView t=filterChip(label,label.equals(movementFilter));t.setOnClickListener(v->{movementFilter=label;showSection("Mouvements");});return t;}
+    private void renderPhoneHistoryFiltered(String filter){
+        JSONArray a=loadPhoneHistory();LinearLayout box=softCard(Color.WHITE,Color.rgb(226,232,240));TextView h=text("Historique téléphone",15,true);h.setTextColor(Color.rgb(7,51,94));box.addView(h);int shown=0;
+        for(int i=0;i<a.length()&&shown<250;i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;String typ=x.optString("type","");boolean income="Revenu".equals(typ);if("Dépenses".equals(filter)&&income)continue;if("Revenus".equals(filter)&&!income)continue;
+            LinearLayout row=horizontal();row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(8),0,dp(8));TextView icon=text(phoneMovementIcon(typ),20,true);icon.setGravity(Gravity.CENTER);icon.setTextColor(income?Color.rgb(0,150,83):Color.rgb(18,102,210));row.addView(icon,new LinearLayout.LayoutParams(dp(38),dp(46)));
+            LinearLayout info=vertical();TextView tt=text(x.optString("description",typ),12,true);tt.setTextColor(Color.rgb(7,45,84));info.addView(tt);TextView meta=text(x.optString("date","")+" "+x.optString("time","")+" • "+x.optString("owner","Commun")+" • "+x.optString("category",""),9,false);meta.setTextColor(Color.GRAY);info.addView(meta);row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            LinearLayout right=vertical();double amt=x.optDouble("amount",0);TextView val=text((income?"+ ":"− ")+money(Math.abs(amt)),11,true);val.setGravity(Gravity.RIGHT);val.setTextColor(income?Color.rgb(0,150,83):Color.rgb(215,48,62));right.addView(val);TextView st=text("✓ "+x.optString("status","Enregistré"),8,true);st.setGravity(Gravity.RIGHT);st.setTextColor(Color.rgb(0,150,83));right.addView(st);row.addView(right,new LinearLayout.LayoutParams(dp(112),-2));box.addView(row);shown++;}
+        if(shown==0){TextView e=text("Aucun mouvement pour ce filtre.",11,false);e.setTextColor(Color.GRAY);e.setPadding(0,dp(10),0,dp(8));box.addView(e);}content.addView(box);
     }
 
     private View filterChip(String label,boolean active){
@@ -772,14 +780,12 @@ public class MainActivity extends Activity {
 
     private void buildEntryForm() {
         screenTitle("Ajouter un mouvement");
+        entryType=new Spinner(this);entryType.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Dépense","Revenu","Transaction","Remboursement crédit","Épargne","Événement"}));entryType.setVisibility(View.GONE);content.addView(entryType);
         LinearLayout types=horizontal();
-        Button b0=typeButton("▣\nDépense",Color.rgb(255,234,236),Color.rgb(220,45,60));b0.setOnClickListener(v->entryType.setSelection(0));types.addView(b0,weight());
-        Button b1=typeButton("＋\nRevenu",Color.rgb(232,249,238),Color.rgb(0,150,83));b1.setOnClickListener(v->entryType.setSelection(1));types.addView(b1,weight());
-        Button b2=typeButton("▤\nRembours.",Color.rgb(255,241,226),Color.rgb(230,120,15));b2.setOnClickListener(v->entryType.setSelection(3));types.addView(b2,weight());
-        Button b3=typeButton("⇄\nTransfert",Color.rgb(244,237,255),Color.rgb(119,64,201));b3.setOnClickListener(v->entryType.setSelection(4));types.addView(b3,weight());content.addView(types);
-
-        entryType=new Spinner(this);entryType.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Dépense","Revenu","Transaction","Remboursement crédit","Épargne","Événement"}));
-        entryType.setVisibility(View.GONE);content.addView(entryType);
+        Button b0=typeButton("▣\nDépense",Color.rgb(255,234,236),Color.rgb(220,45,60));b0.setOnClickListener(v->selectEntryType(0));types.addView(b0,weight());
+        Button b1=typeButton("＋\nRevenu",Color.rgb(232,249,238),Color.rgb(0,150,83));b1.setOnClickListener(v->selectEntryType(1));types.addView(b1,weight());
+        Button b2=typeButton("▤\nRembours.",Color.rgb(255,241,226),Color.rgb(230,120,15));b2.setOnClickListener(v->selectEntryType(3));types.addView(b2,weight());
+        Button b3=typeButton("⇄\nTransfert",Color.rgb(244,237,255),Color.rgb(119,64,201));b3.setOnClickListener(v->selectEntryType(4));types.addView(b3,weight());content.addView(types);
 
         date=input(isoDate());date.setFocusable(false);date.setOnClickListener(v->pickDate());addLabeled(content,"Date",date);
         amount=input("0,00 $");amount.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);addLabeled(content,"Montant",amount);
@@ -800,6 +806,8 @@ public class MainActivity extends Activity {
 
         saveButton=primaryButton("Enregistrer");saveButton.setTextSize(15);saveButton.setPadding(dp(10),dp(14),dp(10),dp(14));saveButton.setOnClickListener(v->saveEntry());content.addView(saveButton,new LinearLayout.LayoutParams(-1,dp(58)));
     }
+
+    private void selectEntryType(int index){if(entryType==null)return;if(index<0||index>=entryType.getCount())index=0;entryType.setSelection(index);toast("Type sélectionné : "+String.valueOf(entryType.getItemAtPosition(index)));}
 
     private Button typeButton(String label,int bg,int fg){Button b=button(label);b.setTextSize(9);b.setTextColor(fg);b.setTypeface(null,Typeface.BOLD);b.setGravity(Gravity.CENTER);b.setPadding(dp(3),dp(6),dp(3),dp(6));GradientDrawable g=new GradientDrawable();g.setColor(bg);g.setCornerRadius(dp(12));g.setStroke(dp(1),Color.rgb(230,235,240));b.setBackground(g);return b;}
 
@@ -868,6 +876,7 @@ public class MainActivity extends Activity {
             try{
                 XlsxAppender.append(getContentResolver(),workbookUri,e);
                 runOnUiThread(()->{
+                    recordPhoneMovement(e,"Envoyé vers Excel");
                     saveButton.setEnabled(true);amount.setText("");description.setText("");note.setText("");time.setText(hmTime());
                     toast("Saisie enregistrée. Couple Finance PC l'importera.");
                 });
