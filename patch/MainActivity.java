@@ -120,7 +120,7 @@ public class MainActivity extends Activity {
         header.addView(heart,new LinearLayout.LayoutParams(dp(48),dp(54)));
 
         LinearLayout brand=vertical();
-        TextView title=text("Couple Finance",24,true); title.setTextColor(Color.WHITE); brand.addView(title);
+        TextView title=text("Couple Finance  v2.6",23,true); title.setTextColor(Color.WHITE); brand.addView(title);
         TextView sub=text("Consultation et saisies vers PC",11,false); sub.setTextColor(Color.rgb(225,238,250)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
