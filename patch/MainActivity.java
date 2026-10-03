@@ -69,6 +69,9 @@ public class MainActivity extends Activity {
     private EditText oneDriveLink;
     private String currentSection = "Accueil";
     private String movementFilter = "Téléphone";
+    private String accountFilter = "Tous";
+    private String debtFilter = "Carte de crédit";
+    private String analysisFilter = "Par catégorie";
 
     private Spinner entryType, owner, category, sourceAccount, destinationAccount, debtAccount;
     private EditText amount, date, time, description, note;
@@ -122,7 +125,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.12",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.13",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -579,13 +582,24 @@ public class MainActivity extends Activity {
     }
 
     private void renderReportsMobile(){
-        screenTitle("Analyses");LinearLayout tabs=horizontal();tabs.addView(filterChip("Par catégorie",true),weight());tabs.addView(filterChip("Par personne",false),weight());tabs.addView(filterChip("Évolution",false),weight());content.addView(tabs);
-        JSONObject sm=snapshot==null?null:snapshot.optJSONObject("summary");double total=sm==null?0:sm.optDouble("expenseActual",0);
-        LinearLayout card=softCard(Color.WHITE,Color.rgb(225,232,240));JSONArray b=snapshot==null?null:snapshot.optJSONArray("budgets");List<Double> vals=new ArrayList<>();List<String> labels=new ArrayList<>();double sum=0;
-        if(b!=null)for(int i=0;i<b.length()&&i<7;i++){JSONObject x=b.optJSONObject(i);if(x==null)continue;double v=Math.max(0,x.optDouble("spent",0));if(v<=0)continue;vals.add(v);labels.add(x.optString("cat","Autres"));sum+=v;}
-        if(vals.isEmpty()){vals.add(Math.max(1,total));labels.add("Dépenses");sum=Math.max(1,total);}
-        LinearLayout body=horizontal();body.addView(new ExpenseDonutView(vals,sum,total),new LinearLayout.LayoutParams(dp(165),dp(165)));LinearLayout leg=vertical();int[] cs={Color.rgb(35,147,235),Color.rgb(245,83,110),Color.rgb(255,179,48),Color.rgb(0,166,96),Color.rgb(132,79,221),Color.rgb(70,194,120)};
-        for(int i=0;i<vals.size();i++){TextView l=text("● "+labels.get(i)+"  "+Math.round(vals.get(i)/Math.max(1,sum)*100)+"%  "+money(vals.get(i)),9,false);l.setTextColor(cs[i%cs.length]);leg.addView(l);}body.addView(leg,new LinearLayout.LayoutParams(0,-2,1));card.addView(body);content.addView(card);
+        screenTitle("Analyses");LinearLayout tabs=horizontal();for(String x:new String[]{"Par catégorie","Par personne","Évolution"})tabs.addView(analysisFilterChip(x),weight());content.addView(tabs);
+        if("Évolution".equals(analysisFilter)){JSONArray ms=snapshot==null?null:snapshot.optJSONArray("monthlySeries");if(ms==null||ms.length()==0){emptyState("Aucune donnée d’évolution.");return;}content.addView(new ProjectionChartView(ms),new LinearLayout.LayoutParams(-1,dp(230)));return;}
+        if("Par personne".equals(analysisFilter)){renderAnalysisByPerson();return;}
+        renderAnalysisByCategory();
+    }
+    private View analysisFilterChip(String label){View v=filterChip(label,label.equals(analysisFilter));v.setOnClickListener(x->{analysisFilter=label;showSection("Rapports");});return v;}
+    private void renderAnalysisByCategory(){
+        JSONObject sm=snapshot==null?null:snapshot.optJSONObject("summary");double total=sm==null?0:sm.optDouble("expenseActual",0);JSONArray b=snapshot==null?null:snapshot.optJSONArray("budgets");List<Double> vals=new ArrayList<>();List<String> labels=new ArrayList<>();double sum=0;
+        if(b!=null)for(int i=0;i<b.length()&&i<7;i++){JSONObject x=b.optJSONObject(i);if(x==null)continue;double v=Math.max(0,x.optDouble("spent",0));if(v<=0)continue;vals.add(v);labels.add(x.optString("cat","Autres"));sum+=v;}if(vals.isEmpty()){vals.add(Math.max(1,total));labels.add("Dépenses");sum=Math.max(1,total);}content.addView(analysisDonutCard(vals,labels,sum,total));
+    }
+    private void renderAnalysisByPerson(){
+        JSONArray tx=snapshot==null?null:snapshot.optJSONArray("transactions");double h=0,f=0,c=0;
+        if(tx!=null)for(int i=0;i<tx.length();i++){JSONObject x=tx.optJSONObject(i);if(x==null)continue;double v=x.optDouble("amount",0);if(v>=0)continue;v=Math.abs(v);String o=x.optString("owner","Commun");if("Homme".equalsIgnoreCase(o))h+=v;else if("Femme".equalsIgnoreCase(o))f+=v;else c+=v;}
+        List<Double> vals=new ArrayList<>();List<String> labels=new ArrayList<>();if(h>0){vals.add(h);labels.add("Homme");}if(f>0){vals.add(f);labels.add("Femme");}if(c>0){vals.add(c);labels.add("Commun");}double sum=h+f+c;if(vals.isEmpty()){emptyState("Aucune dépense par personne disponible.");return;}content.addView(analysisDonutCard(vals,labels,sum,sum));
+    }
+    private View analysisDonutCard(List<Double> vals,List<String> labels,double sum,double total){
+        LinearLayout card=softCard(Color.WHITE,Color.rgb(225,232,240));LinearLayout body=horizontal();body.addView(new ExpenseDonutView(vals,sum,total),new LinearLayout.LayoutParams(dp(165),dp(165)));LinearLayout leg=vertical();int[] cs={Color.rgb(35,147,235),Color.rgb(245,83,110),Color.rgb(255,179,48),Color.rgb(0,166,96),Color.rgb(132,79,221),Color.rgb(70,194,120)};
+        for(int i=0;i<vals.size();i++){TextView l=text("● "+labels.get(i)+"  "+Math.round(vals.get(i)/Math.max(1,sum)*100)+"%  "+money(vals.get(i)),9,false);l.setTextColor(cs[i%cs.length]);leg.addView(l);}body.addView(leg,new LinearLayout.LayoutParams(0,-2,1));card.addView(body);return card;
     }
 
     private LinearLayout softCard(int bg,int stroke){LinearLayout c=vertical();c.setPadding(dp(12),dp(10),dp(12),dp(10));GradientDrawable g=new GradientDrawable();g.setColor(bg);g.setCornerRadius(dp(16));g.setStroke(dp(1),stroke);c.setBackground(g);c.setElevation(dp(1));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(dp(2),dp(5),dp(2),dp(5));c.setLayoutParams(p);return c;}
@@ -598,16 +612,22 @@ public class MainActivity extends Activity {
 
     private void renderAccounts() {
         screenTitle("Comptes");
-        LinearLayout filters=horizontal();filters.addView(filterChip("Tous",true),weight());filters.addView(filterChip("Homme",false),weight());filters.addView(filterChip("Femme",false),weight());filters.addView(filterChip("Commun",false),weight());content.addView(filters);
+        LinearLayout filters=horizontal();for(String x:new String[]{"Tous","Homme","Femme","Commun"})filters.addView(accountFilterChip(x),weight());content.addView(filters);
         JSONArray a=snapshot.optJSONArray("accounts");if(empty(a)){emptyState("Aucun compte.");return;}
-        double current=0,credit=0,savings=0;for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;String type=x.optString("type","").toLowerCase(Locale.CANADA_FRENCH);double bal=x.optDouble("balance",0);if(type.contains("carte")||type.contains("crédit")||type.contains("credit"))credit+=bal;else if(type.contains("épargne")||type.contains("epargne")||type.contains("celi")||type.contains("reee"))savings+=bal;else current+=bal;}
+        double current=0,credit=0,savings=0;int visible=0;
+        for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null||!accountMatches(x))continue;visible++;String type=x.optString("type","").toLowerCase(Locale.CANADA_FRENCH);double bal=x.optDouble("balance",0);if(isCreditType(type))credit+=bal;else if(isSavingsType(type))savings+=bal;else current+=bal;}
+        if(visible==0){emptyState("Aucun compte pour "+accountFilter+".");return;}
         content.addView(accountGroupTitle("Comptes courants",money(current),current>=0));
-        for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;String type=x.optString("type","").toLowerCase(Locale.CANADA_FRENCH);if(!(type.contains("carte")||type.contains("crédit")||type.contains("credit")||type.contains("épargne")||type.contains("epargne")||type.contains("celi")||type.contains("reee")))content.addView(accountRow(x,false));}
+        for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null||!accountMatches(x))continue;String type=x.optString("type","").toLowerCase(Locale.CANADA_FRENCH);if(!isCreditType(type)&&!isSavingsType(type))content.addView(accountRow(x,false));}
         content.addView(accountGroupTitle("Cartes de crédit",money(credit),credit>=0));
-        for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;String type=x.optString("type","").toLowerCase(Locale.CANADA_FRENCH);if(type.contains("carte")||type.contains("crédit")||type.contains("credit"))content.addView(accountRow(x,true));}
+        for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null||!accountMatches(x))continue;String type=x.optString("type","").toLowerCase(Locale.CANADA_FRENCH);if(isCreditType(type))content.addView(accountRow(x,true));}
         content.addView(accountGroupTitle("Épargne",money(savings),true));
-        for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;String type=x.optString("type","").toLowerCase(Locale.CANADA_FRENCH);if(type.contains("épargne")||type.contains("epargne")||type.contains("celi")||type.contains("reee"))content.addView(accountRow(x,false));}
+        for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null||!accountMatches(x))continue;String type=x.optString("type","").toLowerCase(Locale.CANADA_FRENCH);if(isSavingsType(type))content.addView(accountRow(x,false));}
     }
+    private View accountFilterChip(String label){View v=filterChip(label,label.equals(accountFilter));v.setOnClickListener(x->{accountFilter=label;showSection("Comptes");});return v;}
+    private boolean accountMatches(JSONObject x){return "Tous".equals(accountFilter)||accountFilter.equalsIgnoreCase(x.optString("owner","Commun"));}
+    private boolean isCreditType(String t){return t.contains("carte")||t.contains("crédit")||t.contains("credit");}
+    private boolean isSavingsType(String t){return t.contains("épargne")||t.contains("epargne")||t.contains("celi")||t.contains("reee");}
 
     private View accountGroupTitle(String title,String value,boolean positive){
         LinearLayout r=horizontal();r.setPadding(dp(3),dp(12),dp(3),dp(4));TextView t=text(title,13,true);t.setTextColor(Color.rgb(8,35,70));r.addView(t,new LinearLayout.LayoutParams(0,-2,1));TextView v=text(value,12,true);v.setTextColor(positive?Color.rgb(0,135,75):Color.rgb(210,45,60));r.addView(v);return r;
@@ -726,11 +746,16 @@ public class MainActivity extends Activity {
     }
 
     private void renderDebtsGoals() {
-        screenTitle("Dettes");LinearLayout filters=horizontal();filters.addView(filterChip("Toutes",false),weight());filters.addView(filterChip("Carte de crédit",true),weight());filters.addView(filterChip("Prêt",false),weight());filters.addView(filterChip("Autres",false),weight());content.addView(filters);
-        JSONArray accounts=snapshot.optJSONArray("accounts"),debts=snapshot.optJSONArray("debts");if(empty(accounts)&&empty(debts)){emptyState("Aucune dette.");return;}
-        if(accounts!=null)for(int i=0;i<accounts.length();i++){JSONObject a=accounts.optJSONObject(i);if(a==null)continue;String type=a.optString("type","").toLowerCase(Locale.CANADA_FRENCH);if(type.contains("carte")||type.contains("crédit")||type.contains("credit"))content.addView(creditDebtCard(a,debts));}
-        if(debts!=null){content.addView(sectionLabel("Autres dettes"));for(int i=0;i<debts.length();i++){JSONObject d=debts.optJSONObject(i);if(d==null)continue;String aid=d.optString("sourceAccountId","");boolean linked=false;if(accounts!=null)for(int j=0;j<accounts.length();j++){JSONObject a=accounts.optJSONObject(j);if(a!=null&&aid.equals(a.optString("id",""))){linked=true;break;}}if(!linked)content.addView(infoCard(d.optString("owner","Commun")+" — "+d.optString("name","Dette"),debtBody(d)));}}
+        screenTitle("Dettes");LinearLayout filters=horizontal();for(String x:new String[]{"Toutes","Carte de crédit","Prêt","Autres"})filters.addView(debtFilterChip(x),weight());content.addView(filters);
+        JSONArray accounts=snapshot.optJSONArray("accounts"),debts=snapshot.optJSONArray("debts");if(empty(accounts)&&empty(debts)){emptyState("Aucune dette.");return;}int shown=0;
+        if(("Toutes".equals(debtFilter)||"Carte de crédit".equals(debtFilter))&&accounts!=null)for(int i=0;i<accounts.length();i++){JSONObject a=accounts.optJSONObject(i);if(a==null)continue;String type=a.optString("type","").toLowerCase(Locale.CANADA_FRENCH);if(isCreditType(type)){content.addView(creditDebtCard(a,debts));shown++;}}
+        if(debts!=null)for(int i=0;i<debts.length();i++){JSONObject d=debts.optJSONObject(i);if(d==null)continue;String aid=d.optString("sourceAccountId","");boolean linked=false;if(accounts!=null)for(int j=0;j<accounts.length();j++){JSONObject a=accounts.optJSONObject(j);if(a!=null&&aid.equals(a.optString("id",""))){linked=true;break;}}if(linked)continue;
+            String typ=(d.optString("type","")+" "+d.optString("name","")).toLowerCase(Locale.CANADA_FRENCH);boolean loan=typ.contains("prêt")||typ.contains("pret")||typ.contains("loan")||typ.contains("accord");
+            if("Carte de crédit".equals(debtFilter))continue;if("Prêt".equals(debtFilter)&&!loan)continue;if("Autres".equals(debtFilter)&&loan)continue;
+            if(shown==0||shown>0)content.addView(infoCard(d.optString("owner","Commun")+" — "+d.optString("name","Dette"),debtBody(d)));shown++;}
+        if(shown==0)emptyState("Aucune dette dans « "+debtFilter+" ».");
     }
+    private View debtFilterChip(String label){View v=filterChip(label,label.equals(debtFilter));v.setOnClickListener(x->{debtFilter=label;showSection("Dettes");});return v;}
 
     private View creditDebtCard(JSONObject a,JSONArray debts){
         LinearLayout c=softCard(Color.WHITE,Color.rgb(225,232,240));TextView n=text(a.optString("owner","Commun")+" — "+a.optString("institution","")+" — "+a.optString("name","Carte"),12,true);n.setTextColor(Color.rgb(8,35,70));c.addView(n);
