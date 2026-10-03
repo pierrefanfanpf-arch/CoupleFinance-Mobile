@@ -496,7 +496,7 @@ public class MainActivity extends Activity {
                 content.addView(movementRow(x.optString("date",""),x.optString("desc","Transaction"),x.optString("cat",""),amt,"PC"));shown++;}
         }
     }
-    private View movementFilterChip(String label){TextView t=filterChip(label,label.equals(movementFilter));t.setOnClickListener(v->{movementFilter=label;showSection("Mouvements");});return t;}
+    private View movementFilterChip(String label){View t=filterChip(label,label.equals(movementFilter));t.setOnClickListener(v->{movementFilter=label;showSection("Mouvements");});return t;}
     private void renderPhoneHistoryFiltered(String filter){
         JSONArray a=loadPhoneHistory();LinearLayout box=softCard(Color.WHITE,Color.rgb(226,232,240));TextView h=text("Historique téléphone",15,true);h.setTextColor(Color.rgb(7,51,94));box.addView(h);int shown=0;
         for(int i=0;i<a.length()&&shown<250;i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;String typ=x.optString("type","");boolean income="Revenu".equals(typ);if("Dépenses".equals(filter)&&income)continue;if("Revenus".equals(filter)&&!income)continue;
