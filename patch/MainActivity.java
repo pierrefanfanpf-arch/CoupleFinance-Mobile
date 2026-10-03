@@ -17,6 +17,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.provider.DocumentsContract;
 import android.view.Gravity;
+import android.view.WindowInsets;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -121,7 +122,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.10",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.11",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -134,7 +135,16 @@ public class MainActivity extends Activity {
         content=vertical(); content.setPadding(dp(12),dp(10),dp(12),dp(18));
         pageScroll.addView(content,new ScrollView.LayoutParams(-1,-2));
         root.addView(pageScroll,new LinearLayout.LayoutParams(-1,0,1));
-        root.addView(buildBottomNav(),new LinearLayout.LayoutParams(-1,dp(72)));
+        View bottomNav=buildBottomNav();
+        root.addView(bottomNav,new LinearLayout.LayoutParams(-1,dp(72)));
+        root.setOnApplyWindowInsetsListener((v,insets)->{
+            int bottom=0;
+            if(android.os.Build.VERSION.SDK_INT>=30)bottom=insets.getInsets(WindowInsets.Type.navigationBars()).bottom;
+            else bottom=insets.getSystemWindowInsetBottom();
+            v.setPadding(v.getPaddingLeft(),v.getPaddingTop(),v.getPaddingRight(),bottom);
+            return insets;
+        });
+        root.requestApplyInsets();
 
         connectionStatus=text("Aucun stockage cloud connecté.",12,false);
         syncStatus=text("",11,false);
