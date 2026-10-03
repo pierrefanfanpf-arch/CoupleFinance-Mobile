@@ -125,7 +125,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.14",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.15",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -523,7 +523,12 @@ public class MainActivity extends Activity {
     }
 
     private View filterChip(String label,boolean active){
-        TextView t=text(label,9,active);t.setGravity(Gravity.CENTER);t.setTextColor(active?Color.WHITE:Color.rgb(75,88,102));
+        Button t=new Button(this);
+        t.setText(label);t.setTextSize(9);t.setAllCaps(false);t.setGravity(Gravity.CENTER);
+        t.setTypeface(Typeface.DEFAULT,active?Typeface.BOLD:Typeface.NORMAL);
+        t.setTextColor(active?Color.WHITE:Color.rgb(75,88,102));
+        t.setMinHeight(0);t.setMinimumHeight(0);t.setMinWidth(0);t.setMinimumWidth(0);
+        t.setPadding(dp(5),0,dp(5),0);t.setClickable(true);t.setFocusable(true);
         GradientDrawable g=new GradientDrawable();g.setColor(active?Color.rgb(0,166,96):Color.WHITE);g.setCornerRadius(dp(18));g.setStroke(dp(1),Color.rgb(224,231,238));t.setBackground(g);
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(38),1);p.setMargins(dp(2),dp(3),dp(2),dp(6));t.setLayoutParams(p);return t;
     }
@@ -587,7 +592,7 @@ public class MainActivity extends Activity {
         if("Par personne".equals(analysisFilter)){renderAnalysisByPerson();return;}
         renderAnalysisByCategory();
     }
-    private View analysisFilterChip(String label){View v=filterChip(label,label.equals(analysisFilter));v.setClickable(true);v.setOnClickListener(x->{analysisFilter=label;content.removeAllViews();renderReportsMobile();toast("Analyse : "+label);});return v;}
+    private View analysisFilterChip(String label){View v=filterChip(label,label.equals(analysisFilter));v.setClickable(true);v.setOnClickListener(x->{analysisFilter=label;showSection("Rapports");});return v;}
     private void renderAnalysisByCategory(){
         JSONObject sm=snapshot==null?null:snapshot.optJSONObject("summary");double total=sm==null?0:sm.optDouble("expenseActual",0);JSONArray b=snapshot==null?null:snapshot.optJSONArray("budgets");List<Double> vals=new ArrayList<>();List<String> labels=new ArrayList<>();double sum=0;
         if(b!=null)for(int i=0;i<b.length()&&i<7;i++){JSONObject x=b.optJSONObject(i);if(x==null)continue;double v=Math.max(0,x.optDouble("spent",0));if(v<=0)continue;vals.add(v);labels.add(x.optString("cat","Autres"));sum+=v;}if(vals.isEmpty()){vals.add(Math.max(1,total));labels.add("Dépenses");sum=Math.max(1,total);}content.addView(analysisDonutCard(vals,labels,sum,total));
@@ -624,7 +629,7 @@ public class MainActivity extends Activity {
         content.addView(accountGroupTitle("Épargne",money(savings),true));
         for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null||!accountMatches(x))continue;String type=x.optString("type","").toLowerCase(Locale.CANADA_FRENCH);if(isSavingsType(type))content.addView(accountRow(x,false));}
     }
-    private View accountFilterChip(String label){View v=filterChip(label,label.equals(accountFilter));v.setClickable(true);v.setOnClickListener(x->{accountFilter=label;content.removeAllViews();renderAccounts();toast("Comptes : "+label);});return v;}
+    private View accountFilterChip(String label){View v=filterChip(label,label.equals(accountFilter));v.setClickable(true);v.setOnClickListener(x->{accountFilter=label;showSection("Comptes");});return v;}
     private boolean accountMatches(JSONObject x){return "Tous".equals(accountFilter)||accountFilter.equalsIgnoreCase(x.optString("owner","Commun"));}
     private boolean isCreditType(String t){return t.contains("carte")||t.contains("crédit")||t.contains("credit");}
     private boolean isSavingsType(String t){return t.contains("épargne")||t.contains("epargne")||t.contains("celi")||t.contains("reee");}
@@ -755,7 +760,7 @@ public class MainActivity extends Activity {
             if(shown==0||shown>0)content.addView(infoCard(d.optString("owner","Commun")+" — "+d.optString("name","Dette"),debtBody(d)));shown++;}
         if(shown==0)emptyState("Aucune dette dans « "+debtFilter+" ».");
     }
-    private View debtFilterChip(String label){View v=filterChip(label,label.equals(debtFilter));v.setClickable(true);v.setOnClickListener(x->{debtFilter=label;content.removeAllViews();renderDebtsGoals();toast("Dettes : "+label);});return v;}
+    private View debtFilterChip(String label){View v=filterChip(label,label.equals(debtFilter));v.setClickable(true);v.setOnClickListener(x->{debtFilter=label;showSection("Dettes");});return v;}
 
     private View creditDebtCard(JSONObject a,JSONArray debts){
         LinearLayout c=softCard(Color.WHITE,Color.rgb(225,232,240));TextView n=text(a.optString("owner","Commun")+" — "+a.optString("institution","")+" — "+a.optString("name","Carte"),12,true);n.setTextColor(Color.rgb(8,35,70));c.addView(n);
