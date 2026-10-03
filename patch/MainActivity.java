@@ -41,8 +41,13 @@ import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final int PICK_FOLDER = 3001;
+    private static final int PICK_WORKBOOK = 3002;
+    private static final int PICK_VIEW = 3003;
     private static final String PREFS = "cf_mobile_v2";
     private static final String PREF_TREE = "onedrive_tree_uri";
+    private static final String PREF_WORKBOOK = "onedrive_workbook_uri";
+    private static final String PREF_VIEW = "onedrive_view_uri";
+    private static final String PREF_LINK = "onedrive_folder_link";
     private static final String WORKBOOK_NAME = "CoupleFinance_Mobile.xlsx";
     private static final String VIEW_NAME = "CoupleFinance_Mobile_View.json";
 
@@ -56,11 +61,13 @@ public class MainActivity extends Activity {
     private LinearLayout content;
     private TextView connectionStatus;
     private TextView syncStatus;
+    private EditText oneDriveLink;
     private String currentSection = "Accueil";
 
-    private Spinner entryType, owner, category, sourceAccount, destinationAccount;
+    private Spinner entryType, owner, category, sourceAccount, destinationAccount, debtAccount;
     private EditText amount, date, time, description, note;
-    private LinearLayout destinationBlock;
+    private LinearLayout destinationBlock, debtBlock;
+    private final List<String> debtIds = new ArrayList<>();
     private Button saveButton;
 
     private final String[] sections = new String[]{
@@ -69,7 +76,7 @@ public class MainActivity extends Activity {
 
     private final Runnable autoRefresh = new Runnable() {
         @Override public void run() {
-            if (treeUri != null) {
+            if (treeUri != null || viewUri != null) {
                 try { refreshSnapshot(false); } catch (Exception ignored) {}
             }
             handler.postDelayed(this, 30000);
@@ -90,7 +97,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (treeUri != null) {
+        if (treeUri != null || viewUri != null) {
             try { refreshSnapshot(false); } catch (Exception ignored) {}
         }
     }
@@ -101,7 +108,7 @@ public class MainActivity extends Activity {
         root.setPadding(dp(14), dp(12), dp(14), dp(30));
         outer.addView(root);
 
-        TextView title = text("♥ Couple Finance Mobile", 24, true);
+        TextView title = text("♥ Couple Finance Mobile 2.2", 24, true);
         title.setTextColor(Color.rgb(7, 51, 94));
         root.addView(title);
 
@@ -110,8 +117,23 @@ public class MainActivity extends Activity {
         root.addView(sub);
         spacer(root, 10);
 
+        TextView linkLabel = text("Lien du dossier OneDrive (optionnel)", 12, true);
+        root.addView(linkLabel);
+        oneDriveLink = input("https://1drv.ms/... ou https://onedrive.live.com/...");
+        oneDriveLink.setText(getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_LINK, ""));
+        root.addView(oneDriveLink, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout linkRow = horizontal();
+        Button saveLink = button("Mémoriser le lien");
+        saveLink.setOnClickListener(v -> saveOneDriveLink());
+        linkRow.addView(saveLink, weight());
+        Button openLink = button("Ouvrir OneDrive");
+        openLink.setOnClickListener(v -> openOneDriveLink());
+        linkRow.addView(openLink, weight());
+        root.addView(linkRow);
+
         LinearLayout connectRow = horizontal();
-        Button connect = button("Connecter OneDrive");
+        Button connect = button("Choisir dossier");
         connect.setOnClickListener(v -> chooseFolder());
         connectRow.addView(connect, weight());
         Button refresh = button("Actualiser");
@@ -119,7 +141,21 @@ public class MainActivity extends Activity {
         connectRow.addView(refresh, weight());
         root.addView(connectRow);
 
-        connectionStatus = text("Aucun dossier connecté.", 12, false);
+        LinearLayout fileRow = horizontal();
+        Button chooseWorkbook = button("Choisir Excel OneDrive");
+        chooseWorkbook.setOnClickListener(v -> chooseWorkbookFile());
+        fileRow.addView(chooseWorkbook, weight());
+        Button chooseView = button("Choisir vue PC JSON");
+        chooseView.setOnClickListener(v -> chooseViewFile());
+        fileRow.addView(chooseView, weight());
+        root.addView(fileRow);
+
+        TextView help = text("Si OneDrive n'apparaît pas dans « Choisir dossier », colle le lien OneDrive ci-dessus, ouvre-le, puis sélectionne les deux fichiers individuellement.", 11, false);
+        help.setTextColor(Color.GRAY);
+        help.setPadding(0, dp(4), 0, dp(4));
+        root.addView(help);
+
+        connectionStatus = text("Aucune source OneDrive connectée.", 12, false);
         connectionStatus.setPadding(dp(8), dp(8), dp(8), dp(8));
         root.addView(connectionStatus);
 
@@ -146,6 +182,38 @@ public class MainActivity extends Activity {
         return outer;
     }
 
+    private void saveOneDriveLink() {
+        String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_LINK, link).apply();
+        toast(link.isEmpty() ? "Lien OneDrive effacé." : "Lien OneDrive mémorisé.");
+    }
+
+    private void openOneDriveLink() {
+        String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
+        if (link.isEmpty()) { toast("Entre d'abord le lien du dossier OneDrive."); return; }
+        if (!(link.startsWith("https://") || link.startsWith("http://"))) { link = "https://" + link; oneDriveLink.setText(link); }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_LINK, link).apply();
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link))); }
+        catch (Exception e) { toast("Impossible d'ouvrir ce lien OneDrive : " + e.getMessage()); }
+    }
+
+    private void chooseWorkbookFile() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(i, PICK_WORKBOOK);
+    }
+
+    private void chooseViewFile() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/plain", "application/octet-stream"});
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(i, PICK_VIEW);
+    }
+
     private void chooseFolder() {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
@@ -157,32 +225,41 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int req, int result, Intent data) {
         super.onActivityResult(req, result, data);
-        if (req != PICK_FOLDER || result != RESULT_OK || data == null || data.getData() == null) return;
+        if (result != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         try { getContentResolver().takePersistableUriPermission(uri, flags); } catch (Exception ignored) {}
-        treeUri = uri;
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_TREE, uri.toString()).apply();
-        try {
-            locateFiles();
-            ensureWorkbook();
-            refreshSnapshot(true);
-        } catch (Exception e) {
-            setConnection(false, "Erreur OneDrive : " + e.getMessage());
+        SharedPreferences.Editor ed = getSharedPreferences(PREFS, MODE_PRIVATE).edit();
+
+        if (req == PICK_FOLDER) {
+            treeUri = uri; ed.putString(PREF_TREE, uri.toString()).apply();
+            try { locateFiles(); ensureWorkbook(); refreshSnapshot(true); }
+            catch (Exception e) { setConnection(false, "Erreur OneDrive : " + e.getMessage()); }
+            return;
+        }
+        if (req == PICK_WORKBOOK) {
+            workbookUri = uri; ed.putString(PREF_WORKBOOK, uri.toString()).apply();
+            setConnection(true, "Excel OneDrive sélectionné."); toast("Fichier Excel mémorisé."); return;
+        }
+        if (req == PICK_VIEW) {
+            viewUri = uri; ed.putString(PREF_VIEW, uri.toString()).apply();
+            setConnection(true, "Vue PC OneDrive sélectionnée."); refreshSnapshot(true);
         }
     }
 
     private void restoreFolder() {
-        String s = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_TREE, "");
-        if (s.isEmpty()) return;
-        treeUri = Uri.parse(s);
+        SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String t = sp.getString(PREF_TREE, ""), w = sp.getString(PREF_WORKBOOK, ""), v = sp.getString(PREF_VIEW, ""), link = sp.getString(PREF_LINK, "");
+        if (oneDriveLink != null) oneDriveLink.setText(link);
+        if (!t.isEmpty()) treeUri = Uri.parse(t);
+        if (!w.isEmpty()) workbookUri = Uri.parse(w);
+        if (!v.isEmpty()) viewUri = Uri.parse(v);
         try {
-            locateFiles();
-            ensureWorkbook();
-            refreshSnapshot(false);
-        } catch (Exception e) {
-            setConnection(false, "Connexion mémorisée inaccessible : " + e.getMessage());
-        }
+            if (treeUri != null) locateFiles();
+            if (treeUri != null && workbookUri == null) ensureWorkbook();
+            if (viewUri != null || treeUri != null) refreshSnapshot(false);
+            else if (workbookUri != null) setConnection(true, "Excel OneDrive mémorisé. Choisis maintenant la vue PC JSON.");
+        } catch (Exception e) { setConnection(false, "Connexion mémorisée inaccessible : " + e.getMessage()); }
     }
 
     private Uri treeDocumentUri() {
@@ -191,8 +268,10 @@ public class MainActivity extends Activity {
     }
 
     private void locateFiles() throws Exception {
-        workbookUri = findChild(WORKBOOK_NAME);
-        viewUri = findChild(VIEW_NAME);
+        if (treeUri == null) return;
+        Uri wb = findChild(WORKBOOK_NAME), vw = findChild(VIEW_NAME);
+        if (wb != null) workbookUri = wb;
+        if (vw != null) viewUri = vw;
         setConnection(true, "Dossier OneDrive connecté.");
     }
 
@@ -240,14 +319,17 @@ public class MainActivity extends Activity {
     }
 
     private void refreshSnapshot(boolean userMessage) {
-        if (treeUri == null) {
-            if (userMessage) toast("Connectez d'abord votre dossier OneDrive.");
+        if (treeUri == null && viewUri == null) {
+            if (userMessage) toast("Choisis le dossier OneDrive ou le fichier CoupleFinance_Mobile_View.json.");
             return;
         }
         try {
-            locateFiles();
-            ensureWorkbook();
-            viewUri = findChild(VIEW_NAME);
+            if (treeUri != null) {
+                locateFiles();
+                if (workbookUri == null) ensureWorkbook();
+                Uri detectedView = findChild(VIEW_NAME);
+                if (detectedView != null) viewUri = detectedView;
+            }
             if (viewUri == null) {
                 snapshot = null;
                 syncStatus.setText("La vue lecture seule n'est pas encore disponible. Ouvrez Couple Finance sur le PC puis sauvegardez/actualisez la vue téléphone.");
@@ -297,7 +379,7 @@ public class MainActivity extends Activity {
             buildEntryForm();
             return;
         }
-        TextView ro = text("Lecture seule — les données se modifient uniquement dans l'application PC.", 11, false);
+        TextView ro = text("Dépenses".equals(section) ? "Lecture seule, sauf l’action Reporter sur une échéance." : "Lecture seule — les données se modifient uniquement dans l'application PC.", 11, false);
         ro.setTextColor(Color.GRAY);
         content.addView(ro);
         spacer(content, 8);
@@ -348,6 +430,10 @@ public class MainActivity extends Activity {
                     x.optString("type","Compte")+"\nSolde : "+money(bal));
             if(x.optDouble("limit",0)>0)body+="\nLimite : "+money(x.optDouble("limit",0))+" • Disponible : "+money(x.optDouble("available",0));
             if(x.optDouble("debt",0)>0)body+="\nDette liée : "+money(x.optDouble("debt",0));
+            if("Carte de crédit".equalsIgnoreCase(x.optString("type",""))){
+                body+="\nMinimum demandé : "+money(x.optDouble("minPayment",0));
+                if(!x.isNull("minPaymentRemaining"))body+=" • Reste ce mois : "+money(x.optDouble("minPaymentRemaining",0));
+            }
             content.addView(infoCard(x.optString("name","Compte"),body));
         }
     }
@@ -370,16 +456,72 @@ public class MainActivity extends Activity {
     }
 
     private void renderExpenses() {
-        JSONObject s=snapshot.optJSONObject("summary");
-        if(s!=null)content.addView(kpiCard("Dépenses du mois",money(s.optDouble("expenseActual",0)),"Total prévu : "+money(s.optDouble("expensePlanned",0)),false));
+        JSONObject sm=snapshot.optJSONObject("summary");
+        if(sm!=null)content.addView(kpiCard("Dépenses du mois",money(sm.optDouble("expenseActual",0)),"Total prévu : "+money(sm.optDouble("expensePlanned",0)),false));
         content.addView(sectionLabel("Budget"));
         renderArray("budgets", 60, x ->
                 x.optString("cat","Catégorie"),
                 x -> "Réel : "+money(x.optDouble("spent",0))+" • Prévu : "+money(x.optDouble("budget",0)));
-        content.addView(sectionLabel("Dépenses constantes"));
-        renderArray("recurring", 60, x ->
-                x.optString("name","Dépense constante"),
-                x -> x.optString("owner","Commun")+" • "+x.optString("cat","Autres")+"\n"+money(x.optDouble("amount",0))+" • Jour "+x.optInt("day",1)+" • "+(x.optBoolean("active",true)?"Active":"Inactive"));
+
+        content.addView(sectionLabel("Dépenses constantes / paiements"));
+        JSONArray a=snapshot.optJSONArray("recurringView");
+        if(a==null){
+            renderArray("recurring", 60, x ->
+                    x.optString("name","Dépense constante"),
+                    x -> x.optString("owner","Commun")+" • "+x.optString("cat","Autres")+"\n"+money(x.optDouble("amount",0)));
+            return;
+        }
+        if(a.length()==0){emptyState("Aucune dépense constante active.");return;}
+        for(int i=0;i<a.length();i++){
+            final JSONObject x=a.optJSONObject(i); if(x==null)continue;
+            LinearLayout c=cardBox();
+            TextView t=text(x.optString("name","Dépense constante"),15,true);t.setTextColor(Color.rgb(7,51,94));c.addView(t);
+            String state=x.optBoolean("posted",false)?"Prise en compte":(x.optBoolean("deferred",false)?"Reportée":"À venir");
+            String body=x.optString("owner","Commun")+" • "+x.optString("category","Autres")+"\nMontant / reste : "+money(x.optDouble("amount",0))+
+                    "\nÉchéance : "+x.optString("dueDate","—")+" • "+state;
+            if(!x.isNull("minimumRemaining"))body+="\nMinimum carte restant : "+money(x.optDouble("minimumRemaining",0));
+            TextView b=text(body,12,false);b.setTextColor(Color.DKGRAY);b.setPadding(0,dp(4),0,dp(6));c.addView(b);
+            Button report=button(x.optBoolean("posted",false)?"Reporter / retirer du mois":"Reporter");
+            report.setOnClickListener(v->chooseDeferralDate(x));
+            c.addView(report,new LinearLayout.LayoutParams(-1,-2));
+            content.addView(c);
+        }
+    }
+
+    private void chooseDeferralDate(JSONObject rec) {
+        String due=rec.optString("dueDate", isoDate());
+        Calendar cal=Calendar.getInstance();
+        try{
+            Date d=new SimpleDateFormat("yyyy-MM-dd",Locale.CANADA_FRENCH).parse(due);
+            if(d!=null)cal.setTime(d);
+        }catch(Exception ignored){}
+        new DatePickerDialog(this,(v,y,m,d)->{
+            String nd=String.format(Locale.CANADA_FRENCH,"%04d-%02d-%02d",y,m+1,d);
+            writeDeferralCommand(rec,nd);
+        },cal.get(Calendar.YEAR),cal.get(Calendar.MONTH),cal.get(Calendar.DAY_OF_MONTH)).show();
+    }
+
+    private boolean ensureWorkbookForWrite() {
+        if(treeUri==null && workbookUri==null){toast("Choisis d'abord le fichier Excel OneDrive.");return false;}
+        try{
+            if(treeUri!=null){locateFiles();if(workbookUri==null)ensureWorkbook();}
+            if(workbookUri==null)throw new Exception("CoupleFinance_Mobile.xlsx n'est pas sélectionné.");
+            return true;
+        }catch(Exception e){toast("Excel mobile inaccessible : "+e.getMessage());return false;}
+    }
+
+    private void writeDeferralCommand(JSONObject rec,String newDate) {
+        if(!ensureWorkbookForWrite())return;
+        XlsxAppender.Entry e=new XlsxAppender.Entry();
+        e.date=isoDate();e.time=hmTime();e.owner=rec.optString("owner","Commun");e.type="Reporter paiement";e.amount=0;
+        e.category="Report";e.description=rec.optString("name","Paiement reporté");e.account="";
+        e.note="RECURRENCE_ID="+rec.optString("id","")+"; NEWDATE="+newDate+"; PERIOD="+rec.optString("period","");
+        new Thread(()->{
+            try{
+                XlsxAppender.append(getContentResolver(),workbookUri,e);
+                runOnUiThread(()->toast("Report envoyé au PC pour le "+newDate+"."));
+            }catch(Exception ex){runOnUiThread(()->toast("Erreur d'écriture : "+ex.getMessage()));}
+        }).start();
     }
 
     private void renderTransactions() {
@@ -403,11 +545,19 @@ public class MainActivity extends Activity {
         content.addView(sectionLabel("Dettes"));
         renderArray("debts",80,x ->
                 x.optString("owner","Commun")+" • "+x.optString("name","Dette"),
-                x -> "Solde : "+money(x.optDouble("balance",0))+" • Taux : "+fmt(x.optDouble("rate",0))+" %\nMinimum : "+money(x.optDouble("min",0))+" • Échéance : "+x.optString("dueDate","—"));
+                x -> debtBody(x));
         content.addView(sectionLabel("Objectifs"));
         renderArray("goals",80,x ->
                 x.optString("name","Objectif"),
                 x -> "Objectif : "+money(x.optDouble("price",0))+" • Épargné : "+money(x.optDouble("saved",0))+"\nMode : "+x.optString("mode",""));
+    }
+
+    private String debtBody(JSONObject x){
+        String body="Solde : "+money(x.optDouble("balance",0))+" • Taux : "+fmt(x.optDouble("rate",0))+" %\nMinimum : "+money(x.optDouble("min",0))+" • Échéance : "+x.optString("dueDate","—");
+        String aid=x.optString("sourceAccountId","");
+        JSONArray acc=snapshot==null?null:snapshot.optJSONArray("accounts");
+        if(acc!=null&&!aid.isEmpty())for(int i=0;i<acc.length();i++){JSONObject a=acc.optJSONObject(i);if(a!=null&&aid.equals(a.optString("id",""))&&!a.isNull("minPaymentRemaining")){body+="\nReste minimum ce mois : "+money(a.optDouble("minPaymentRemaining",0));break;}}
+        return body;
     }
 
     private void renderSavings() {
@@ -451,11 +601,11 @@ public class MainActivity extends Activity {
     }
 
     private void buildEntryForm() {
-        TextView info=text("Seule cette page écrit des données. Les autres pages sont strictement en lecture seule.",11,false);
+        TextView info=text("Cette page crée de nouvelles saisies. La page Dépenses peut aussi reporter une échéance existante.",11,false);
         info.setTextColor(Color.GRAY);content.addView(info);spacer(content,8);
 
         entryType=new Spinner(this);
-        entryType.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Dépense","Revenu","Transaction","Épargne","Événement"}));
+        entryType.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Dépense","Revenu","Transaction","Remboursement crédit","Épargne","Événement"}));
         addLabeled(content,"Type de saisie",entryType);
 
         owner=new Spinner(this);
@@ -483,10 +633,21 @@ public class MainActivity extends Activity {
         content.addView(destinationBlock);
         destinationBlock.setVisibility(View.GONE);
 
+        debtBlock=vertical();
+        debtAccount=new Spinner(this);
+        debtAccount.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,debtLabels()));
+        addLabeled(debtBlock,"Carte / dette à rembourser",debtAccount);
+        content.addView(debtBlock);
+        debtBlock.setVisibility(View.GONE);
+
         note=input("Optionnel");note.setMinLines(3);note.setSingleLine(false);note.setGravity(Gravity.TOP);addLabeled(content,"Note",note);
 
         entryType.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
-            public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){destinationBlock.setVisibility("Épargne".equals(String.valueOf(entryType.getSelectedItem()))?View.VISIBLE:View.GONE);}
+            public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){
+                String type=String.valueOf(entryType.getSelectedItem());
+                destinationBlock.setVisibility("Épargne".equals(type)?View.VISIBLE:View.GONE);
+                debtBlock.setVisibility("Remboursement crédit".equals(type)?View.VISIBLE:View.GONE);
+            }
             public void onNothingSelected(android.widget.AdapterView<?> p){}
         });
 
@@ -508,9 +669,20 @@ public class MainActivity extends Activity {
         return out;
     }
 
+    private List<String> debtLabels(){
+        debtIds.clear();List<String> out=new ArrayList<>();
+        if(snapshot!=null){JSONArray a=snapshot.optJSONArray("debts");if(a!=null)for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x!=null&&x.optDouble("balance",0)>0){debtIds.add(x.optString("id",""));out.add(x.optString("owner","Commun")+" — "+x.optString("name","Dette")+" — "+money(x.optDouble("balance",0)));}}}
+        if(out.isEmpty()){debtIds.add("");out.add("Aucune dette disponible");}
+        return out;
+    }
+
+    private String selectedDebtId(){
+        int p=debtAccount==null?0:debtAccount.getSelectedItemPosition();
+        return (p>=0&&p<debtIds.size())?debtIds.get(p):"";
+    }
+
     private void saveEntry() {
-        if(treeUri==null){toast("Connectez d'abord le dossier OneDrive.");return;}
-        try{locateFiles();ensureWorkbook();}catch(Exception e){toast("Excel mobile inaccessible : "+e.getMessage());return;}
+        if(!ensureWorkbookForWrite())return;
         String uiType=String.valueOf(entryType.getSelectedItem());
         String desc=description.getText().toString().trim();
         if(desc.isEmpty())desc=uiType+" téléphone";
@@ -537,6 +709,12 @@ public class MainActivity extends Activity {
             if(dest.isEmpty()||dest.equals(src)){toast("Choisissez un compte destination différent.");return;}
             e.category="Épargne";
             e.note="DESTINATION="+dest+"; "+userNote;
+        }else if("Remboursement crédit".equals(uiType)){
+            String did=selectedDebtId();
+            if(did.isEmpty()){toast("Choisissez une carte ou une dette à rembourser.");return;}
+            e.type="Remboursement crédit";
+            e.category="Remboursement dette supplémentaire";
+            e.note="DEBT_ID="+did+"; "+userNote;
         }else e.note=userNote;
 
         saveButton.setEnabled(false);
