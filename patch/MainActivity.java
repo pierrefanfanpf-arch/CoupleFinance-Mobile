@@ -576,7 +576,7 @@ public class MainActivity extends Activity {
             }catch(Exception ignored){}
         }
 
-        LinearLayout assetBtns=horizontal();Button allAssets=smallButton("Tout sélectionner");Button noAssets=smallButton("Tout désélectionner");assetBtns.addView(allAssets,weight());assetBtns.addView(noAssets,weight());content.addView(assetBtns);
+        LinearLayout assetBtns=horizontal();Button allAssets=primaryButton("Tout sélectionner");Button noAssets=primaryButton("Tout désélectionner");assetBtns.addView(allAssets,weight());assetBtns.addView(noAssets,weight());content.addView(assetBtns);
         TextView selectedTotal=text("Sélection : "+money(0),11,true);selectedTotal.setTextColor(Color.rgb(0,145,84));content.addView(selectedTotal);
         allAssets.setOnClickListener(v->{double z=0;for(int i=0;i<assetChecks.size();i++){assetChecks.get(i).setChecked(true);z+=assetDefs.get(i).optDouble("amount",0);}selectedTotal.setText("Sélection : "+money(z));});
         noAssets.setOnClickListener(v->{for(CheckBox cb:assetChecks)cb.setChecked(false);selectedTotal.setText("Sélection : "+money(0));});
