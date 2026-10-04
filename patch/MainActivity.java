@@ -458,6 +458,13 @@ public class MainActivity extends Activity {
         }).show();
     }
 
+    private View infoLine(String label,String value){
+        LinearLayout row=horizontal(); row.setPadding(0,dp(6),0,dp(6));
+        TextView l=text(label,11,false); l.setTextColor(Color.rgb(70,85,105));
+        TextView v=text(value,11,true); v.setTextColor(Color.rgb(8,35,70)); v.setGravity(Gravity.RIGHT);
+        row.addView(l,weight()); row.addView(v,weight()); return row;
+    }
+
     private void renderFinancialOrganization(){
         currentSection="Organisation financière"; content.removeAllViews(); screenTitle("Organisation familiale");
         TextView intro=text("Toutes les informations disponibles dans l'organisation financière du PC, synchronisées par Google Drive.",11,false);
