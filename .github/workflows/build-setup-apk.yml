@@ -41,11 +41,11 @@ jobs:
         run: |
           cd extracted/CoupleFinance_Mobile_Android_V2_VIEWER
           gradle :app:assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk ../../CoupleFinance_Mobile_V2.21_GOOGLE_DRIVE.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../../CoupleFinance_Mobile_V2.22_GOOGLE_DRIVE.apk
 
-      - name: Upload CoupleFinance Mobile V2.21 APK
+      - name: Upload CoupleFinance Mobile V2.22 APK
         uses: actions/upload-artifact@v4
         with:
-          name: CoupleFinance-Mobile-V2.21-GoogleDrive
-          path: CoupleFinance_Mobile_V2.21_GOOGLE_DRIVE.apk
+          name: CoupleFinance-Mobile-V2.22-GoogleDrive
+          path: CoupleFinance_Mobile_V2.22_GOOGLE_DRIVE.apk
           if-no-files-found: error
