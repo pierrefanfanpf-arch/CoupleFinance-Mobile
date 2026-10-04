@@ -48,10 +48,10 @@ public class MainActivity extends Activity {
     private static final int PICK_WORKBOOK = 3002;
     private static final int PICK_VIEW = 3003;
     private static final String PREFS = "cf_mobile_v2";
-    private static final String PREF_TREE = "onedrive_tree_uri";
-    private static final String PREF_WORKBOOK = "onedrive_workbook_uri";
-    private static final String PREF_VIEW = "onedrive_view_uri";
-    private static final String PREF_LINK = "onedrive_folder_link";
+    private static final String PREF_TREE = "google_drive_tree_uri";
+    private static final String PREF_WORKBOOK = "google_drive_workbook_uri";
+    private static final String PREF_VIEW = "google_drive_view_uri";
+    private static final String PREF_LINK = "google_drive_folder_link";
     private static final String PREF_PHONE_HISTORY = "phone_movement_history_v1";
     private static final String WORKBOOK_NAME = "CoupleFinance_Mobile.xlsx";
     private static final String SYNC_NAME = "CoupleFinance_Mobile_Sync.json";
@@ -127,7 +127,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.19 JSON",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.20 Google Drive",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -156,7 +156,7 @@ public class MainActivity extends Activity {
 
         connectionStatus=text("Aucun stockage cloud connecté.",12,false);
         syncStatus=text("",11,false);
-        oneDriveLink=input("https://1drv.ms/... ou https://onedrive.live.com/...");
+        oneDriveLink=input("Dossier Google Drive sélectionné via Android");
         oneDriveLink.setText(getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_LINK, ""));
         showSection("Accueil");
         return root;
@@ -180,36 +180,36 @@ public class MainActivity extends Activity {
         if(center)b.setElevation(dp(7)); b.setOnClickListener(v->showSection(section)); return b;
     }
 
-    private void saveOneDriveLink() {
+    private void saveGoogle DriveLink() {
         String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_LINK, link).apply();
-        toast(link.isEmpty() ? "Lien OneDrive effacé." : "Lien OneDrive mémorisé.");
+        toast(link.isEmpty() ? "Lien Google Drive effacé." : "Lien Google Drive mémorisé.");
     }
 
-    private void validateAndConnectOneDrive() {
+    private void validateAndConnectGoogle Drive() {
         String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
-        if (link.isEmpty()) { toast("Entre le lien de ton répertoire OneDrive."); return; }
+        if (link.isEmpty()) { toast("Entre le lien de ton répertoire Google Drive."); return; }
         if (!(link.startsWith("https://") || link.startsWith("http://"))) { link = "https://" + link; oneDriveLink.setText(link); }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_LINK, link).apply();
         if (treeUri != null && hasPersistedTreePermission(treeUri)) {
             try {
                 locateFiles(); ensureSyncJson(); refreshSnapshot(true);
-                toast("OneDrive connecté • lecture/écriture JSON.");
+                toast("Google Drive connecté • lecture/écriture JSON.");
                 showSection("Paramètres");
                 return;
             } catch (Exception ignored) {}
         }
-        toast("Première connexion : autorise le répertoire OneDrive une seule fois.");
+        toast("Première connexion : autorise le répertoire Google Drive une seule fois.");
         chooseFolder();
     }
 
-    private void openOneDriveLink() {
+    private void openGoogle DriveLink() {
         String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
-        if (link.isEmpty()) { toast("Entre d'abord le lien du dossier OneDrive."); return; }
+        if (link.isEmpty()) { toast("Entre d'abord le lien du dossier Google Drive."); return; }
         if (!(link.startsWith("https://") || link.startsWith("http://"))) { link = "https://" + link; oneDriveLink.setText(link); }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_LINK, link).apply();
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link))); }
-        catch (Exception e) { toast("Impossible d'ouvrir ce lien OneDrive : " + e.getMessage()); }
+        catch (Exception e) { toast("Impossible d'ouvrir ce lien Google Drive : " + e.getMessage()); }
     }
 
     private void chooseWorkbookFile() {
@@ -243,11 +243,31 @@ public class MainActivity extends Activity {
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-        try { getContentResolver().takePersistableUriPermission(uri, flags); } catch (Exception ignored) {}
+        if (req == PICK_FOLDER) {
+            if ((flags & Intent.FLAG_GRANT_READ_URI_PERMISSION) == 0 ||
+                (flags & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == 0) {
+                setConnection(false, "Google Drive doit autoriser la lecture et l’écriture du dossier.");
+                return;
+            }
+        }
+        try { getContentResolver().takePersistableUriPermission(uri, flags); }
+        catch (Exception e) {
+            if (req == PICK_FOLDER) {
+                setConnection(false, "Autorisation Google Drive non conservée : " + e.getMessage());
+                return;
+            }
+        }
         SharedPreferences.Editor ed = getSharedPreferences(PREFS, MODE_PRIVATE).edit();
 
         if (req == PICK_FOLDER) {
-            treeUri = uri; ed.putString(PREF_TREE, uri.toString()).apply();
+            treeUri = uri;
+            syncUri = null;
+            viewUri = null;
+            workbookUri = null;
+            ed.putString(PREF_TREE, uri.toString())
+              .remove(PREF_VIEW)
+              .remove(PREF_WORKBOOK)
+              .apply();
             try { locateFiles(); ensureSyncJson(); refreshSnapshot(true); }
             catch (Exception e) { setConnection(false, "Erreur stockage cloud : " + e.getMessage()); }
             return;
@@ -334,9 +354,21 @@ public class MainActivity extends Activity {
     }
 
     private void writeText(Uri uri,String txt) throws Exception {
-        try(OutputStream out=getContentResolver().openOutputStream(uri,"rwt")){
-            if(out==null)throw new Exception("Le stockage cloud refuse l'écriture JSON.");
-            out.write(txt.getBytes(StandardCharsets.UTF_8));out.flush();
+        if(uri==null) throw new Exception("URI JSON absente.");
+        OutputStream out=null;
+        try {
+            try { out=getContentResolver().openOutputStream(uri,"wt"); } catch(Exception ignored) {}
+            if(out==null) {
+                try { out=getContentResolver().openOutputStream(uri,"w"); } catch(Exception ignored) {}
+            }
+            if(out==null) {
+                try { out=getContentResolver().openOutputStream(uri); } catch(Exception ignored) {}
+            }
+            if(out==null) throw new Exception("Google Drive refuse l'ouverture du JSON en écriture.");
+            out.write(txt.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+        } finally {
+            if(out!=null) try { out.close(); } catch(Exception ignored) {}
         }
     }
 
@@ -378,7 +410,7 @@ public class MainActivity extends Activity {
         if (created == null) throw new Exception("Impossible de créer " + WORKBOOK_NAME);
         try (InputStream in = getAssets().open(WORKBOOK_NAME);
              OutputStream out = getContentResolver().openOutputStream(created, "wt")) {
-            if (out == null) throw new Exception("OneDrive refuse l'écriture du fichier Excel.");
+            if (out == null) throw new Exception("Google Drive refuse l'écriture du fichier Excel.");
             byte[] buf = new byte[8192];
             int n;
             while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
@@ -389,7 +421,7 @@ public class MainActivity extends Activity {
 
     private void refreshSnapshot(boolean userMessage) {
         if (treeUri == null && viewUri == null) {
-            if (userMessage) toast("Choisis le dossier OneDrive ou le fichier CoupleFinance_Mobile_View.json.");
+            if (userMessage) toast("Choisis le dossier Google Drive ou le fichier CoupleFinance_Mobile_View.json.");
             return;
         }
         try {
@@ -402,7 +434,7 @@ public class MainActivity extends Activity {
             if (viewUri == null) {
                 snapshot = null;
                 if(syncStatus!=null)syncStatus.setText("La vue lecture seule n'est pas encore disponible. Ouvrez Couple Finance sur le PC puis sauvegardez/actualisez la vue téléphone.");
-                if (userMessage) toast("Fichier de vue non trouvé dans OneDrive.");
+                if (userMessage) toast("Fichier de vue non trouvé dans Google Drive.");
                 showSection(currentSection);
                 return;
             }
@@ -555,15 +587,15 @@ public class MainActivity extends Activity {
 
     private void renderSettings(){
         TextView h=text("Paramètres",22,true);h.setTextColor(Color.rgb(7,51,94));content.addView(h);
-        TextView sh=text("Connexion OneDrive",16,true);sh.setTextColor(Color.rgb(7,51,94));sh.setPadding(0,dp(8),0,dp(4));content.addView(sh);
+        TextView sh=text("Connexion Google Drive",16,true);sh.setTextColor(Color.rgb(7,51,94));sh.setPadding(0,dp(8),0,dp(4));content.addView(sh);
         LinearLayout c=softCard(Color.WHITE,Color.rgb(220,229,238));
-        oneDriveLink=input("Colle ici le lien de ton répertoire OneDrive");oneDriveLink.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(PREF_LINK,""));
-        addLabeled(c,"Lien du répertoire OneDrive",oneDriveLink);
+        oneDriveLink=input("Colle ici le lien de ton répertoire Google Drive");oneDriveLink.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(PREF_LINK,""));
+        addLabeled(c,"Lien du répertoire Google Drive",oneDriveLink);
         boolean writeOk=treeUri!=null&&hasPersistedTreePermission(treeUri);
-        Button connect=primaryButton(writeOk?"✓ OneDrive connecté — Valider":"Valider et connecter");connect.setOnClickListener(v->validateAndConnectOneDrive());c.addView(connect,new LinearLayout.LayoutParams(-1,-2));
+        Button connect=primaryButton(writeOk?"✓ Google Drive connecté — Valider":"Valider et connecter");connect.setOnClickListener(v->validateAndConnectGoogle Drive());c.addView(connect,new LinearLayout.LayoutParams(-1,-2));
         TextView help=text(writeOk?"L'autorisation Android du répertoire est mémorisée. Aucune nouvelle sélection n'est nécessaire.":"À la première connexion seulement, Android demandera d'autoriser le répertoire correspondant. L'autorisation sera ensuite mémorisée.",10,false);help.setTextColor(Color.GRAY);help.setPadding(0,dp(8),0,dp(5));c.addView(help);
         Button refresh=smallPill("↻ Actualiser");refresh.setOnClickListener(v->refreshSnapshot(true));c.addView(refresh,new LinearLayout.LayoutParams(-1,dp(48)));
-        TextView write=text(writeOk?"✓ OneDrive connecté • écriture JSON autorisée":"○ OneDrive non autorisé en écriture",12,true);write.setTextColor(writeOk?Color.rgb(24,137,91):Color.rgb(190,120,30));write.setPadding(0,dp(10),0,dp(2));c.addView(write);
+        TextView write=text(writeOk?"✓ Google Drive connecté • écriture JSON autorisée":"○ Google Drive non autorisé en écriture",12,true);write.setTextColor(writeOk?Color.rgb(24,137,91):Color.rgb(190,120,30));write.setPadding(0,dp(10),0,dp(2));c.addView(write);
         TextView read=text(snapshot!=null?"✓ Données PC disponibles":"○ Données PC non chargées",12,true);read.setTextColor(snapshot!=null?Color.rgb(24,137,91):Color.GRAY);c.addView(read);
         syncStatus=text(snapshot==null?"Synchronisation PC en attente.":"Dernière vue PC : "+snapshot.optString("generatedAt","—")+" • "+snapshot.optString("period","—"),11,false);syncStatus.setTextColor(Color.GRAY);c.addView(syncStatus);
         connectionStatus=write;content.addView(c);
@@ -789,13 +821,12 @@ public class MainActivity extends Activity {
     }
 
     private boolean ensureWorkbookForWrite() {
-        if(treeUri==null){toast("Choisis d'abord le dossier OneDrive / Google Drive dans Paramètres.");return false;}
+        if(treeUri==null){toast("Choisis d'abord le dossier Google Drive / Google Drive dans Paramètres.");return false;}
         try{locateFiles();ensureSyncJson();return true;}
         catch(Exception e){toast("Synchronisation JSON inaccessible : "+e.getMessage());return false;}
     }
 
     private void writeDeferralCommand(JSONObject rec,String newDate) {
-        if(!ensureWorkbookForWrite())return;
         XlsxAppender.Entry e=new XlsxAppender.Entry();
         e.date=isoDate();e.time=hmTime();e.owner=rec.optString("owner","Commun");e.type="Reporter paiement";e.amount=0;
         e.category="Report";e.description=rec.optString("name","Paiement reporté");e.account="";
@@ -918,7 +949,7 @@ public class MainActivity extends Activity {
         debtBlock=vertical();debtAccount=new Spinner(this);debtAccount.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,debtLabels()));addLabeled(debtBlock,"Carte / dette à rembourser",debtAccount);content.addView(debtBlock);debtBlock.setVisibility(View.GONE);
 
         note=input("Optionnel");note.setMinLines(2);note.setSingleLine(false);note.setGravity(Gravity.TOP);addLabeled(content,"Note",note);
-        Button receipt=typeButton("▣  Ajouter une photo du reçu",Color.rgb(247,249,252),Color.rgb(70,88,106));receipt.setOnClickListener(v->toast("La photo du reçu sera ajoutée dans une prochaine étape sans modifier l'écriture Excel actuelle."));content.addView(receipt,new LinearLayout.LayoutParams(-1,dp(52)));
+        Button receipt=typeButton("▣  Ajouter une photo du reçu",Color.rgb(247,249,252),Color.rgb(70,88,106));receipt.setOnClickListener(v->toast("La photo du reçu sera ajoutée dans une prochaine étape sans modifier la synchronisation JSON."));content.addView(receipt,new LinearLayout.LayoutParams(-1,dp(52)));
 
         entryType.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){String type=String.valueOf(entryType.getSelectedItem());destinationBlock.setVisibility("Épargne".equals(type)?View.VISIBLE:View.GONE);debtBlock.setVisibility("Remboursement crédit".equals(type)?View.VISIBLE:View.GONE);}public void onNothingSelected(android.widget.AdapterView<?> p){}});
 
@@ -989,17 +1020,23 @@ public class MainActivity extends Activity {
             e.note="DEBT_ID="+did+"; "+userNote;
         }else e.note=userNote;
 
+        if(treeUri==null || !hasPersistedTreePermission(treeUri)){
+            toast("Choisissez d'abord le dossier Google Drive dans Paramètres.");
+            return;
+        }
         saveButton.setEnabled(false);
         new Thread(()->{
             try{
-                XlsxAppender.append(getContentResolver(),workbookUri,e);
+                locateFiles();
+                appendJsonOperation(e);
                 runOnUiThread(()->{
-                    recordPhoneMovement(e,"Envoyé vers Excel");
+                    recordPhoneMovement(e,"Envoyé vers JSON");
                     saveButton.setEnabled(true);amount.setText("");description.setText("");note.setText("");time.setText(hmTime());
-                    toast("Saisie enregistrée. Couple Finance PC l'importera.");
+                    toast("Saisie enregistrée dans "+SYNC_NAME+".");
+                    try { refreshSnapshot(false); } catch(Exception ignored) {}
                 });
             }catch(Exception ex){
-                runOnUiThread(()->{saveButton.setEnabled(true);toast("Erreur d'écriture : "+ex.getMessage());});
+                runOnUiThread(()->{saveButton.setEnabled(true);toast("Erreur d'écriture Google Drive : "+ex.getMessage());});
             }
         }).start();
     }
