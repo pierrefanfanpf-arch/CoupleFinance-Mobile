@@ -469,6 +469,7 @@ public class MainActivity extends Activity {
         if(incomes!=null)for(int i=0;i<incomes.length();i++){JSONObject x=incomes.optJSONObject(i);if(x==null)continue;double v=x.optDouble("monthly",x.optDouble("amount",x.optDouble("net",0)));String o=x.optString("owner","Commun");if("Homme".equalsIgnoreCase(o))homme+=v;else if("Femme".equalsIgnoreCase(o))femme+=v;else commun+=v;}
         if(homme+femme+commun<=0){JSONArray entries=snapshot==null?null:snapshot.optJSONArray("incomeEntries");if(entries!=null)for(int i=0;i<entries.length();i++){JSONObject x=entries.optJSONObject(i);if(x==null)continue;double v=x.optDouble("amount",0);String o=x.optString("owner","Commun");if("Homme".equalsIgnoreCase(o))homme+=v;else if("Femme".equalsIgnoreCase(o))femme+=v;else commun+=v;}}
         if(totalIncome<=0)totalIncome=homme+femme+commun;
+        final double incomeHomme=homme, incomeFemme=femme, incomeCommun=commun;
 
         LinearLayout rev=softCard(Color.WHITE,Color.rgb(225,232,240));TextView rt=text("Répartition des revenus",15,true);rt.setTextColor(Color.rgb(8,35,70));rev.addView(rt);
         LinearLayout rr=horizontal();rr.addView(compactMetric("Homme",money(homme),Color.rgb(8,35,70)),weight());rr.addView(compactMetric("Femme",money(femme),Color.rgb(8,35,70)),weight());rr.addView(compactMetric("Commun",money(commun),Color.rgb(8,35,70)),weight());rev.addView(rr);
@@ -500,7 +501,7 @@ public class MainActivity extends Activity {
             if(treeUri==null||!hasPersistedTreePermission(treeUri)){toast("Choisis d'abord le dossier Google Drive.");return;}
             try{
                 JSONObject p=new JSONObject();p.put("mode",String.valueOf(mode.getSelectedItem()));p.put("essentialPct",number(essential));p.put("debtPct",number(debt));p.put("savingPct",number(saving));p.put("investmentPct",number(invest));p.put("notes",notes.getText().toString().trim());
-                p.put("incomeHomme",homme);p.put("incomeFemme",femme);p.put("incomeCommun",commun);
+                p.put("incomeHomme",incomeHomme);p.put("incomeFemme",incomeFemme);p.put("incomeCommun",incomeCommun);
                 appendMobileConfigOperation("financial_organization_update",p);
                 sp.edit().putString("org_mode",p.optString("mode")).putString("org_essential",essential.getText().toString()).putString("org_debt",debt.getText().toString()).putString("org_saving",saving.getText().toString()).putString("org_invest",invest.getText().toString()).putString("org_notes",notes.getText().toString()).apply();
                 toast("Organisation financière envoyée au PC.");
