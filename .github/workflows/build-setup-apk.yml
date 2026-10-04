@@ -49,3 +49,5 @@ jobs:
           name: CoupleFinance-Mobile-V2.25-GoogleDrive
           path: CoupleFinance_Mobile_V2.25_GOOGLE_DRIVE.apk
           if-no-files-found: error
+
+# v2.25 multi-asset trigger
