@@ -127,7 +127,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.18 JSON",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.19 JSON",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -184,6 +184,23 @@ public class MainActivity extends Activity {
         String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_LINK, link).apply();
         toast(link.isEmpty() ? "Lien OneDrive effacé." : "Lien OneDrive mémorisé.");
+    }
+
+    private void validateAndConnectOneDrive() {
+        String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
+        if (link.isEmpty()) { toast("Entre le lien de ton répertoire OneDrive."); return; }
+        if (!(link.startsWith("https://") || link.startsWith("http://"))) { link = "https://" + link; oneDriveLink.setText(link); }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_LINK, link).apply();
+        if (treeUri != null && hasPersistedTreePermission(treeUri)) {
+            try {
+                locateFiles(); ensureSyncJson(); refreshSnapshot(true);
+                toast("OneDrive connecté • lecture/écriture JSON.");
+                showSection("Paramètres");
+                return;
+            } catch (Exception ignored) {}
+        }
+        toast("Première connexion : autorise le répertoire OneDrive une seule fois.");
+        chooseFolder();
     }
 
     private void openOneDriveLink() {
@@ -537,16 +554,18 @@ public class MainActivity extends Activity {
     }
 
     private void renderSettings(){
-        TextView h=text("Paramètres",22,true);h.setTextColor(Color.rgb(7,51,94));content.addView(h);TextView sh=text("Stockage cloud",16,true);sh.setTextColor(Color.rgb(7,51,94));sh.setPadding(0,dp(8),0,dp(4));content.addView(sh);
-        LinearLayout c=softCard(Color.WHITE,Color.rgb(220,229,238));oneDriveLink=input("https://1drv.ms/... ou https://onedrive.live.com/...");oneDriveLink.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(PREF_LINK,""));addLabeled(c,"Lien du dossier OneDrive (optionnel)",oneDriveLink);
-        LinearLayout lr=horizontal();Button save=smallPill("Mémoriser le lien");save.setOnClickListener(v->saveOneDriveLink());lr.addView(save,weight());Button open=smallPill("Ouvrir OneDrive");open.setOnClickListener(v->openOneDriveLink());lr.addView(open,weight());c.addView(lr);
+        TextView h=text("Paramètres",22,true);h.setTextColor(Color.rgb(7,51,94));content.addView(h);
+        TextView sh=text("Connexion OneDrive",16,true);sh.setTextColor(Color.rgb(7,51,94));sh.setPadding(0,dp(8),0,dp(4));content.addView(sh);
+        LinearLayout c=softCard(Color.WHITE,Color.rgb(220,229,238));
+        oneDriveLink=input("Colle ici le lien de ton répertoire OneDrive");oneDriveLink.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(PREF_LINK,""));
+        addLabeled(c,"Lien du répertoire OneDrive",oneDriveLink);
         boolean writeOk=treeUri!=null&&hasPersistedTreePermission(treeUri);
-        Button folder=primaryButton(writeOk?"✓ Dossier autorisé en écriture":"Autoriser le dossier OneDrive / Google Drive");folder.setOnClickListener(v->chooseFolder());c.addView(folder,new LinearLayout.LayoutParams(-1,-2));
-        Button json=smallPill(viewUri!=null?"✓ Vue PC JSON sélectionnée":"Choisir vue PC JSON");json.setOnClickListener(v->chooseViewFile());c.addView(json,new LinearLayout.LayoutParams(-1,dp(52)));
-        Button refresh=primaryButton("↻ Actualiser maintenant");refresh.setOnClickListener(v->refreshSnapshot(true));c.addView(refresh,new LinearLayout.LayoutParams(-1,-2));
-        TextView write=text(writeOk?"✓ Écriture JSON autorisée et mémorisée":"⚠ Écriture JSON : autorisation du dossier requise une seule fois",12,true);write.setTextColor(writeOk?Color.rgb(24,137,91):Color.rgb(190,120,30));write.setPadding(0,dp(10),0,dp(2));c.addView(write);
-        TextView read=text(snapshot!=null?"✓ Lecture PC JSON connectée":"○ Lecture PC JSON non chargée",12,true);read.setTextColor(snapshot!=null?Color.rgb(24,137,91):Color.GRAY);c.addView(read);
-        syncStatus=text(snapshot==null?"Vue PC non chargée.":"Vue PC : "+snapshot.optString("generatedAt","—")+" • "+snapshot.optString("period","—"),11,false);syncStatus.setTextColor(Color.GRAY);c.addView(syncStatus);
+        Button connect=primaryButton(writeOk?"✓ OneDrive connecté — Valider":"Valider et connecter");connect.setOnClickListener(v->validateAndConnectOneDrive());c.addView(connect,new LinearLayout.LayoutParams(-1,-2));
+        TextView help=text(writeOk?"L'autorisation Android du répertoire est mémorisée. Aucune nouvelle sélection n'est nécessaire.":"À la première connexion seulement, Android demandera d'autoriser le répertoire correspondant. L'autorisation sera ensuite mémorisée.",10,false);help.setTextColor(Color.GRAY);help.setPadding(0,dp(8),0,dp(5));c.addView(help);
+        Button refresh=smallPill("↻ Actualiser");refresh.setOnClickListener(v->refreshSnapshot(true));c.addView(refresh,new LinearLayout.LayoutParams(-1,dp(48)));
+        TextView write=text(writeOk?"✓ OneDrive connecté • écriture JSON autorisée":"○ OneDrive non autorisé en écriture",12,true);write.setTextColor(writeOk?Color.rgb(24,137,91):Color.rgb(190,120,30));write.setPadding(0,dp(10),0,dp(2));c.addView(write);
+        TextView read=text(snapshot!=null?"✓ Données PC disponibles":"○ Données PC non chargées",12,true);read.setTextColor(snapshot!=null?Color.rgb(24,137,91):Color.GRAY);c.addView(read);
+        syncStatus=text(snapshot==null?"Synchronisation PC en attente.":"Dernière vue PC : "+snapshot.optString("generatedAt","—")+" • "+snapshot.optString("period","—"),11,false);syncStatus.setTextColor(Color.GRAY);c.addView(syncStatus);
         connectionStatus=write;content.addView(c);
     }
     private View actionTile(String icon,String title,String sub,String section){
