@@ -127,7 +127,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.17 JSON",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.18 JSON",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -231,7 +231,7 @@ public class MainActivity extends Activity {
 
         if (req == PICK_FOLDER) {
             treeUri = uri; ed.putString(PREF_TREE, uri.toString()).apply();
-            try { locateFiles(); ensureWorkbook(); refreshSnapshot(true); }
+            try { locateFiles(); ensureSyncJson(); refreshSnapshot(true); }
             catch (Exception e) { setConnection(false, "Erreur stockage cloud : " + e.getMessage()); }
             return;
         }
@@ -250,14 +250,22 @@ public class MainActivity extends Activity {
         String t = sp.getString(PREF_TREE, ""), w = sp.getString(PREF_WORKBOOK, ""), v = sp.getString(PREF_VIEW, ""), link = sp.getString(PREF_LINK, "");
         if (oneDriveLink != null) oneDriveLink.setText(link);
         if (!t.isEmpty()) treeUri = Uri.parse(t);
-        if (!w.isEmpty()) workbookUri = Uri.parse(w);
+        if (!w.isEmpty()) workbookUri = Uri.parse(w); // ancienne compatibilité seulement
         if (!v.isEmpty()) viewUri = Uri.parse(v);
         try {
-            if (treeUri != null) locateFiles();
-            if (treeUri != null && workbookUri == null) ensureWorkbook();
+            if(treeUri!=null && !hasPersistedTreePermission(treeUri)) treeUri=null;
+            if (treeUri != null) { locateFiles(); ensureSyncJson(); }
             if (viewUri != null || treeUri != null) refreshSnapshot(false);
-            else if (workbookUri != null) setConnection(true, "Excel cloud mémorisé. Choisis maintenant la vue PC JSON.");
-        } catch (Exception e) { setConnection(false, "Stockage cloud mémorisé inaccessible : " + e.getMessage()); }
+            else setConnection(false, "Lecture PC possible si une vue JSON est choisie • écriture JSON : dossier non autorisé.");
+        } catch (Exception e) { setConnection(false, "Autorisation cloud à renouveler : " + e.getMessage()); }
+    }
+
+    private boolean hasPersistedTreePermission(Uri uri){
+        if(uri==null)return false;
+        for(android.content.UriPermission p:getContentResolver().getPersistedUriPermissions()){
+            if(uri.equals(p.getUri()) && p.isReadPermission() && p.isWritePermission())return true;
+        }
+        return false;
     }
 
     private Uri treeDocumentUri() {
@@ -532,11 +540,14 @@ public class MainActivity extends Activity {
         TextView h=text("Paramètres",22,true);h.setTextColor(Color.rgb(7,51,94));content.addView(h);TextView sh=text("Stockage cloud",16,true);sh.setTextColor(Color.rgb(7,51,94));sh.setPadding(0,dp(8),0,dp(4));content.addView(sh);
         LinearLayout c=softCard(Color.WHITE,Color.rgb(220,229,238));oneDriveLink=input("https://1drv.ms/... ou https://onedrive.live.com/...");oneDriveLink.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(PREF_LINK,""));addLabeled(c,"Lien du dossier OneDrive (optionnel)",oneDriveLink);
         LinearLayout lr=horizontal();Button save=smallPill("Mémoriser le lien");save.setOnClickListener(v->saveOneDriveLink());lr.addView(save,weight());Button open=smallPill("Ouvrir OneDrive");open.setOnClickListener(v->openOneDriveLink());lr.addView(open,weight());c.addView(lr);
-        Button folder=primaryButton("Choisir dossier OneDrive / Google Drive");folder.setOnClickListener(v->chooseFolder());c.addView(folder,new LinearLayout.LayoutParams(-1,-2));
-        LinearLayout fr=horizontal();Button excel=smallPill("Choisir Excel");excel.setOnClickListener(v->chooseWorkbookFile());fr.addView(excel,weight());Button json=smallPill("Choisir vue PC JSON");json.setOnClickListener(v->chooseViewFile());fr.addView(json,weight());c.addView(fr);
+        boolean writeOk=treeUri!=null&&hasPersistedTreePermission(treeUri);
+        Button folder=primaryButton(writeOk?"✓ Dossier autorisé en écriture":"Autoriser le dossier OneDrive / Google Drive");folder.setOnClickListener(v->chooseFolder());c.addView(folder,new LinearLayout.LayoutParams(-1,-2));
+        Button json=smallPill(viewUri!=null?"✓ Vue PC JSON sélectionnée":"Choisir vue PC JSON");json.setOnClickListener(v->chooseViewFile());c.addView(json,new LinearLayout.LayoutParams(-1,dp(52)));
         Button refresh=primaryButton("↻ Actualiser maintenant");refresh.setOnClickListener(v->refreshSnapshot(true));c.addView(refresh,new LinearLayout.LayoutParams(-1,-2));
-        connectionStatus=text((treeUri!=null||workbookUri!=null||viewUri!=null)?"✓ Stockage cloud mémorisé":"Aucun stockage cloud connecté.",12,false);connectionStatus.setTextColor((treeUri!=null||workbookUri!=null||viewUri!=null)?Color.rgb(24,137,91):Color.GRAY);connectionStatus.setPadding(0,dp(8),0,dp(2));c.addView(connectionStatus);
-        syncStatus=text(snapshot==null?"Vue PC non chargée.":"Vue PC : "+snapshot.optString("generatedAt","—")+" • "+snapshot.optString("period","—"),11,false);syncStatus.setTextColor(Color.GRAY);c.addView(syncStatus);content.addView(c);
+        TextView write=text(writeOk?"✓ Écriture JSON autorisée et mémorisée":"⚠ Écriture JSON : autorisation du dossier requise une seule fois",12,true);write.setTextColor(writeOk?Color.rgb(24,137,91):Color.rgb(190,120,30));write.setPadding(0,dp(10),0,dp(2));c.addView(write);
+        TextView read=text(snapshot!=null?"✓ Lecture PC JSON connectée":"○ Lecture PC JSON non chargée",12,true);read.setTextColor(snapshot!=null?Color.rgb(24,137,91):Color.GRAY);c.addView(read);
+        syncStatus=text(snapshot==null?"Vue PC non chargée.":"Vue PC : "+snapshot.optString("generatedAt","—")+" • "+snapshot.optString("period","—"),11,false);syncStatus.setTextColor(Color.GRAY);c.addView(syncStatus);
+        connectionStatus=write;content.addView(c);
     }
     private View actionTile(String icon,String title,String sub,String section){
         LinearLayout c=softCard(Color.WHITE,Color.rgb(226,232,240));c.setGravity(Gravity.CENTER);c.setPadding(dp(5),dp(11),dp(5),dp(11));
@@ -551,7 +562,7 @@ public class MainActivity extends Activity {
         LinearLayout filters=horizontal();String[] names={"Tous","Téléphone","PC","Dépenses","Revenus"};
         for(String name:names)filters.addView(movementFilterChip(name),weight());content.addView(filters);
         LinearLayout note=softCard(Color.rgb(242,248,253),Color.rgb(218,230,240));
-        TextView n=text("ⓘ Filtre actif : "+movementFilter+" • historique téléphone enregistré après écriture Excel réussie.",10,false);n.setTextColor(Color.rgb(73,91,108));note.addView(n);content.addView(note);
+        TextView n=text("ⓘ Filtre actif : "+movementFilter+" • historique téléphone enregistré après écriture JSON confirmée.",10,false);n.setTextColor(Color.rgb(73,91,108));note.addView(n);content.addView(note);
         if(!"PC".equals(movementFilter))renderPhoneHistoryFiltered(movementFilter);
         if(!"Téléphone".equals(movementFilter)&&snapshot!=null){
             content.addView(sectionLabel("Mouvements synchronisés du PC"));JSONArray tx=snapshot.optJSONArray("transactions");int shown=0;
