@@ -135,7 +135,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.24 Répartition intelligente",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.25 Tous les avoirs",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -522,21 +522,78 @@ public class MainActivity extends Activity {
         if(priorities==null||priorities.length()==0)content.addView(text("Aucune priorité reçue du PC.",10,false));
         else for(int i=0;i<priorities.length();i++){Object raw=priorities.opt(i);if(raw instanceof JSONObject){JSONObject p=(JSONObject)raw;content.addView(infoCard((i+1)+". "+p.optString("name",p.optString("title",p.optString("label","Priorité"))),p.optString("description",p.optString("note",p.optString("value","")))));}else if(raw!=null)content.addView(infoCard((i+1)+". Priorité",String.valueOf(raw)));}
 
-        content.addView(sectionLabel("Répartition intelligente"));
-        TextView hint=text("Sélectionne les revenus à répartir et les priorités. L'application calcule une proposition à partir des données synchronisées du PC.",10,false);hint.setTextColor(Color.rgb(83,100,120));content.addView(hint);
-        CheckBox useH=new CheckBox(this);useH.setText("Revenu Homme  •  "+money(incomeHomme));useH.setChecked(incomeHomme>0);content.addView(useH);
-        CheckBox useF=new CheckBox(this);useF.setText("Revenu Femme  •  "+money(incomeFemme));useF.setChecked(incomeFemme>0);content.addView(useF);
-        CheckBox useC=new CheckBox(this);useC.setText("Revenus communs / allocations  •  "+money(incomeCommun));useC.setChecked(incomeCommun>0);content.addView(useC);
-        CheckBox prEss=new CheckBox(this);prEss.setText("Priorité : dépenses essentielles");prEss.setChecked(true);content.addView(prEss);
-        CheckBox prDebt=new CheckBox(this);prDebt.setText("Priorité : remboursement des dettes");prDebt.setChecked(true);content.addView(prDebt);
-        CheckBox prSave=new CheckBox(this);prSave.setText("Priorité : épargne / objectifs");prSave.setChecked(true);content.addView(prSave);
-        CheckBox prInv=new CheckBox(this);prInv.setText("Priorité : placements / investissements");content.addView(prInv);
+        content.addView(sectionLabel("Répartition intelligente — tous les avoirs"));
+        TextView hint=text("Sélectionne un ou plusieurs avoirs disponibles. L'application analyse ensuite les priorités et propose une affectation.",10,false);hint.setTextColor(Color.rgb(83,100,120));content.addView(hint);
+
+        final ArrayList<CheckBox> assetChecks=new ArrayList<>();
+        final ArrayList<JSONObject> assetDefs=new ArrayList<>();
+
+        JSONArray priorSelected=null;
+        try{JSONObject fp=snapshot==null?null:snapshot.optJSONObject("financePlan");JSONObject la=fp==null?null:fp.optJSONObject("lastApplied");priorSelected=la==null?null:la.optJSONArray("selectedAssets");}catch(Exception ignored){}
+
+        if(sources!=null)for(int i=0;i<sources.length();i++){
+            JSONObject x=sources.optJSONObject(i);if(x==null||x.optBoolean("active",true)==false)continue;
+            double v=x.optDouble("monthly",x.optDouble("lastAmount",x.optDouble("amount",x.optDouble("net",0))));if(v<=0)continue;
+            try{
+                JSONObject a=new JSONObject();String aid="income:"+x.optString("id",String.valueOf(i));a.put("id",aid);a.put("sourceId",x.optString("id",""));a.put("name",x.optString("name",x.optString("label","Revenu")));a.put("type","income");a.put("owner",x.optString("owner","Commun"));a.put("amount",v);assetDefs.add(a);
+                CheckBox cb=new CheckBox(this);cb.setText("Revenu • "+a.optString("name")+" • "+a.optString("owner")+" • "+money(v));boolean sel=false;if(priorSelected!=null)for(int j=0;j<priorSelected.length();j++){JSONObject q=priorSelected.optJSONObject(j);if(q!=null&&aid.equals(q.optString("id",""))){sel=true;break;}}cb.setChecked(sel);assetChecks.add(cb);content.addView(cb);
+            }catch(Exception ignored){}
+        }
+
+        JSONArray benefits=snapshot==null?null:snapshot.optJSONArray("benefits");
+        if(benefits!=null)for(int i=0;i<benefits.length();i++){
+            JSONObject x=benefits.optJSONObject(i);if(x==null||x.optBoolean("active",true)==false)continue;
+            double v=x.optDouble("monthly",x.optDouble("amount",0));if(v<=0)continue;
+            try{
+                JSONObject a=new JSONObject();String aid="benefit:"+x.optString("id",String.valueOf(i));a.put("id",aid);a.put("sourceId",x.optString("id",""));a.put("name",x.optString("name",x.optString("label","Allocation / prestation")));a.put("type","benefit");a.put("owner",x.optString("owner","Commun"));a.put("amount",v);assetDefs.add(a);
+                CheckBox cb=new CheckBox(this);cb.setText("Prestation • "+a.optString("name")+" • "+a.optString("owner")+" • "+money(v));boolean sel=false;if(priorSelected!=null)for(int j=0;j<priorSelected.length();j++){JSONObject q=priorSelected.optJSONObject(j);if(q!=null&&aid.equals(q.optString("id",""))){sel=true;break;}}cb.setChecked(sel);assetChecks.add(cb);content.addView(cb);
+            }catch(Exception ignored){}
+        }
+
+        JSONArray accs=snapshot==null?null:snapshot.optJSONArray("accounts");
+        if(accs!=null)for(int i=0;i<accs.length();i++){
+            JSONObject x=accs.optJSONObject(i);if(x==null)continue;double v=x.optDouble("balance",0);if(v<=0)continue;
+            try{
+                JSONObject a=new JSONObject();String aid="account:"+x.optString("id",String.valueOf(i));a.put("id",aid);a.put("sourceId",x.optString("id",""));a.put("name",x.optString("name",x.optString("type","Compte")));a.put("type","account");a.put("owner",x.optString("owner","Commun"));a.put("amount",v);assetDefs.add(a);
+                CheckBox cb=new CheckBox(this);cb.setText("Compte • "+a.optString("name")+" • "+a.optString("owner")+" • "+money(v));boolean sel=false;if(priorSelected!=null)for(int j=0;j<priorSelected.length();j++){JSONObject q=priorSelected.optJSONObject(j);if(q!=null&&aid.equals(q.optString("id",""))){sel=true;break;}}cb.setChecked(sel);assetChecks.add(cb);content.addView(cb);
+            }catch(Exception ignored){}
+        }
+
+        JSONArray invs=snapshot==null?null:snapshot.optJSONArray("investments");
+        if(invs!=null)for(int i=0;i<invs.length();i++){
+            JSONObject x=invs.optJSONObject(i);if(x==null||!x.optString("accountId","").trim().isEmpty())continue;double v=x.optDouble("current",x.optDouble("value",0));if(v<=0)continue;
+            try{
+                JSONObject a=new JSONObject();String aid="investment:"+x.optString("id",String.valueOf(i));a.put("id",aid);a.put("sourceId",x.optString("id",""));a.put("name",x.optString("name",x.optString("type","Placement")));a.put("type","investment");a.put("owner",x.optString("owner","Commun"));a.put("amount",v);assetDefs.add(a);
+                CheckBox cb=new CheckBox(this);cb.setText("Placement • "+a.optString("name")+" • "+a.optString("owner")+" • "+money(v));boolean sel=false;if(priorSelected!=null)for(int j=0;j<priorSelected.length();j++){JSONObject q=priorSelected.optJSONObject(j);if(q!=null&&aid.equals(q.optString("id",""))){sel=true;break;}}cb.setChecked(sel);assetChecks.add(cb);content.addView(cb);
+            }catch(Exception ignored){}
+        }
+
+        if(assetDefs.size()==0){
+            try{
+                if(incomeHomme>0){JSONObject a=new JSONObject();a.put("id","income:homme");a.put("name","Revenus Homme");a.put("type","income");a.put("owner","Homme");a.put("amount",incomeHomme);assetDefs.add(a);CheckBox cb=new CheckBox(this);cb.setText("Revenus Homme • "+money(incomeHomme));assetChecks.add(cb);content.addView(cb);}
+                if(incomeFemme>0){JSONObject a=new JSONObject();a.put("id","income:femme");a.put("name","Revenus Femme");a.put("type","income");a.put("owner","Femme");a.put("amount",incomeFemme);assetDefs.add(a);CheckBox cb=new CheckBox(this);cb.setText("Revenus Femme • "+money(incomeFemme));assetChecks.add(cb);content.addView(cb);}
+                if(incomeCommun>0){JSONObject a=new JSONObject();a.put("id","income:commun");a.put("name","Revenus communs");a.put("type","income");a.put("owner","Commun");a.put("amount",incomeCommun);assetDefs.add(a);CheckBox cb=new CheckBox(this);cb.setText("Revenus communs • "+money(incomeCommun));assetChecks.add(cb);content.addView(cb);}
+            }catch(Exception ignored){}
+        }
+
+        LinearLayout assetBtns=horizontal();Button allAssets=smallButton("Tout sélectionner");Button noAssets=smallButton("Tout désélectionner");assetBtns.addView(allAssets,weight());assetBtns.addView(noAssets,weight());content.addView(assetBtns);
+        TextView selectedTotal=text("Sélection : "+money(0),11,true);selectedTotal.setTextColor(Color.rgb(0,145,84));content.addView(selectedTotal);
+        allAssets.setOnClickListener(v->{double z=0;for(int i=0;i<assetChecks.size();i++){assetChecks.get(i).setChecked(true);z+=assetDefs.get(i).optDouble("amount",0);}selectedTotal.setText("Sélection : "+money(z));});
+        noAssets.setOnClickListener(v->{for(CheckBox cb:assetChecks)cb.setChecked(false);selectedTotal.setText("Sélection : "+money(0));});
+        for(CheckBox cb:assetChecks)cb.setOnCheckedChangeListener((buttonView,isChecked)->{double z=0;for(int i=0;i<assetChecks.size();i++)if(assetChecks.get(i).isChecked())z+=assetDefs.get(i).optDouble("amount",0);selectedTotal.setText("Sélection : "+money(z));});
+
+        content.addView(sectionLabel("Priorités à financer"));
+        CheckBox prEss=new CheckBox(this);prEss.setText("Dépenses essentielles");prEss.setChecked(true);content.addView(prEss);
+        CheckBox prDebt=new CheckBox(this);prDebt.setText("Remboursement des dettes");prDebt.setChecked(true);content.addView(prDebt);
+        CheckBox prSave=new CheckBox(this);prSave.setText("Épargne / objectifs");prSave.setChecked(true);content.addView(prSave);
+        CheckBox prInv=new CheckBox(this);prInv.setText("Placements / investissements");content.addView(prInv);
         Spinner strategy=new Spinner(this);String[] strategies={"Équilibrée","Priorités sélectionnées","Dettes d'abord","Épargne / objectifs d'abord"};strategy.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,strategies));addLabeled(content,"Stratégie",strategy);
-        LinearLayout proposal=softCard(Color.WHITE,Color.rgb(225,232,240));TextView proposalText=text("Appuie sur Analyser et générer.",11,false);proposal.addView(proposalText);content.addView(proposal);
+        LinearLayout proposal=softCard(Color.WHITE,Color.rgb(225,232,240));TextView proposalText=text("Sélectionne un ou plusieurs avoirs puis appuie sur Analyser et générer.",11,false);proposal.addView(proposalText);content.addView(proposal);
         final double[] alloc=new double[4];
         Button analyze=primaryButton("Analyser et générer la répartition");analyze.setOnClickListener(v->{
-            double pool=(useH.isChecked()?incomeHomme:0)+(useF.isChecked()?incomeFemme:0)+(useC.isChecked()?incomeCommun:0);
-            if(pool<=0){toast("Sélectionne au moins un revenu disponible.");return;}
+            double pool=0;for(int i=0;i<assetChecks.size();i++)if(assetChecks.get(i).isChecked())pool+=assetDefs.get(i).optDouble("amount",0);
+            selectedTotal.setText("Sélection : "+money(pool));
+            if(pool<=0){toast("Sélectionne au moins un avoir.");return;}
             double[] w={prEss.isChecked()?number(essential):0,prDebt.isChecked()?number(debt):0,prSave.isChecked()?number(saving):0,prInv.isChecked()?number(invest):0};
             String st=String.valueOf(strategy.getSelectedItem());
             if("Dettes d'abord".equals(st)&&prDebt.isChecked())w[1]+=30;
@@ -544,11 +601,17 @@ public class MainActivity extends Activity {
             if("Priorités sélectionnées".equals(st)){for(int i=0;i<4;i++)if(w[i]>0)w[i]=25;}
             double ws=w[0]+w[1]+w[2]+w[3];if(ws<=0){toast("Sélectionne au moins une priorité.");return;}
             for(int i=0;i<4;i++)alloc[i]=pool*w[i]/ws;
-            proposalText.setText("Montant à répartir : "+money(pool)+"\n\nDépenses essentielles : "+money(alloc[0])+"\nDettes : "+money(alloc[1])+"\nÉpargne / objectifs : "+money(alloc[2])+"\nPlacements : "+money(alloc[3]));
+            proposalText.setText("Avoirs sélectionnés : "+money(pool)+"\n\nDépenses essentielles : "+money(alloc[0])+"\nDettes : "+money(alloc[1])+"\nÉpargne / objectifs : "+money(alloc[2])+"\nPlacements : "+money(alloc[3]));
         });content.addView(analyze,new LinearLayout.LayoutParams(-1,dp(58)));
         Button apply=primaryButton("Appliquer cette répartition");apply.setOnClickListener(v->{
             double sum=alloc[0]+alloc[1]+alloc[2]+alloc[3];if(sum<=0){toast("Génère d'abord une répartition.");return;}if(treeUri==null||!hasPersistedTreePermission(treeUri)){toast("Choisis d'abord le dossier Google Drive.");return;}
-            try{JSONObject p=new JSONObject();p.put("strategy",String.valueOf(strategy.getSelectedItem()));p.put("useHomme",useH.isChecked());p.put("useFemme",useF.isChecked());p.put("useCommun",useC.isChecked());p.put("incomeHomme",incomeHomme);p.put("incomeFemme",incomeFemme);p.put("incomeCommun",incomeCommun);p.put("essentialAmount",alloc[0]);p.put("debtAmount",alloc[1]);p.put("savingAmount",alloc[2]);p.put("investmentAmount",alloc[3]);p.put("totalAllocated",sum);p.put("apply",true);appendMobileConfigOperation("financial_allocation_apply",p);toast("Répartition envoyée. Elle sera appliquée lors de la synchronisation PC.");}catch(Exception ex){toast("Erreur : "+ex.getMessage());}
+            try{
+                JSONObject p=new JSONObject();JSONArray selected=new JSONArray();boolean uh=false,uf=false,uc=false,hasIncome=false,hasAssets=false;double selectedAmount=0;
+                for(int i=0;i<assetChecks.size();i++)if(assetChecks.get(i).isChecked()){JSONObject a=assetDefs.get(i);selected.put(a);selectedAmount+=a.optDouble("amount",0);String o=a.optString("owner","Commun");if("Homme".equalsIgnoreCase(o))uh=true;else if("Femme".equalsIgnoreCase(o))uf=true;else uc=true;String t=a.optString("type","");if("income".equals(t)||"benefit".equals(t))hasIncome=true;if("account".equals(t)||"investment".equals(t))hasAssets=true;}
+                if(selected.length()==0){toast("Sélectionne au moins un avoir.");return;}
+                p.put("strategy",String.valueOf(strategy.getSelectedItem()));p.put("selectedAssets",selected);p.put("selectedAmount",selectedAmount);p.put("useHomme",uh);p.put("useFemme",uf);p.put("useCommun",uc);p.put("includeIncome",hasIncome);p.put("includeAssets",hasAssets);p.put("incomeHomme",incomeHomme);p.put("incomeFemme",incomeFemme);p.put("incomeCommun",incomeCommun);p.put("essentialAmount",alloc[0]);p.put("debtAmount",alloc[1]);p.put("savingAmount",alloc[2]);p.put("investmentAmount",alloc[3]);p.put("totalAllocated",sum);p.put("priorityEssential",prEss.isChecked());p.put("priorityDebt",prDebt.isChecked());p.put("prioritySaving",prSave.isChecked());p.put("priorityInvestment",prInv.isChecked());p.put("apply",true);
+                appendMobileConfigOperation("financial_allocation_apply",p);toast("Répartition de "+selected.length()+" avoir(s) envoyée au PC.");
+            }catch(Exception ex){toast("Erreur : "+ex.getMessage());}
         });content.addView(apply,new LinearLayout.LayoutParams(-1,dp(58)));
 
         EditText notes=input("Règles, priorités ou notes du couple");notes.setSingleLine(false);notes.setMinLines(3);notes.setText(pcOrg!=null?pcOrg.optString("notes",sp.getString("org_notes","")):sp.getString("org_notes",""));addLabeled(content,"Notes de l'organisation familiale",notes);
