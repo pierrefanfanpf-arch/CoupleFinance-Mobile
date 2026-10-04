@@ -88,7 +88,10 @@ public class MainActivity extends Activity {
     private final Runnable autoRefresh = new Runnable() {
         @Override public void run() {
             if (treeUri != null || viewUri != null) {
-                try { refreshSnapshot(false); } catch (Exception ignored) {}
+                try {
+                    // Ne jamais reconstruire un formulaire pendant la saisie.
+                    if (!isEditingSection()) refreshSnapshot(false);
+                } catch (Exception ignored) {}
             }
             handler.postDelayed(this, 30000);
         }
@@ -109,8 +112,12 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (treeUri != null || viewUri != null) {
-            try { refreshSnapshot(false); } catch (Exception ignored) {}
+            try { if (!isEditingSection()) refreshSnapshot(false); } catch (Exception ignored) {}
         }
+    }
+
+    private boolean isEditingSection() {
+        return "Saisie".equals(currentSection) || "Organisation financière".equals(currentSection);
     }
 
     private View buildShell() {
@@ -127,7 +134,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.21 Édition mobile",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.22 Organisation PC",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -453,22 +460,50 @@ public class MainActivity extends Activity {
 
     private void renderFinancialOrganization(){
         currentSection="Organisation financière";content.removeAllViews();screenTitle("Organisation financière");
-        TextView intro=text("Définis comment le couple veut répartir son argent. Cette organisation est modifiable directement sur le téléphone.",11,false);intro.setTextColor(Color.rgb(83,100,120));content.addView(intro);
+        TextView intro=text("Vue synchronisée avec l'organisation financière du PC. Les valeurs disponibles dans CoupleFinance_Mobile_View.json sont affichées ici et peuvent être ajustées depuis le téléphone.",11,false);intro.setTextColor(Color.rgb(83,100,120));content.addView(intro);
+
+        JSONObject sm=snapshot==null?null:snapshot.optJSONObject("summary");if(sm==null)sm=new JSONObject();
+        double totalIncome=sm.optDouble("incomeReceived",0);
+        JSONArray incomes=snapshot==null?null:snapshot.optJSONArray("incomeSources");
+        double homme=0,femme=0,commun=0;
+        if(incomes!=null)for(int i=0;i<incomes.length();i++){JSONObject x=incomes.optJSONObject(i);if(x==null)continue;double v=x.optDouble("monthly",x.optDouble("amount",x.optDouble("net",0)));String o=x.optString("owner","Commun");if("Homme".equalsIgnoreCase(o))homme+=v;else if("Femme".equalsIgnoreCase(o))femme+=v;else commun+=v;}
+        if(homme+femme+commun<=0){JSONArray entries=snapshot==null?null:snapshot.optJSONArray("incomeEntries");if(entries!=null)for(int i=0;i<entries.length();i++){JSONObject x=entries.optJSONObject(i);if(x==null)continue;double v=x.optDouble("amount",0);String o=x.optString("owner","Commun");if("Homme".equalsIgnoreCase(o))homme+=v;else if("Femme".equalsIgnoreCase(o))femme+=v;else commun+=v;}}
+        if(totalIncome<=0)totalIncome=homme+femme+commun;
+
+        LinearLayout rev=softCard(Color.WHITE,Color.rgb(225,232,240));TextView rt=text("Répartition des revenus",15,true);rt.setTextColor(Color.rgb(8,35,70));rev.addView(rt);
+        LinearLayout rr=horizontal();rr.addView(compactMetric("Homme",money(homme),Color.rgb(8,35,70)),weight());rr.addView(compactMetric("Femme",money(femme),Color.rgb(8,35,70)),weight());rr.addView(compactMetric("Commun",money(commun),Color.rgb(8,35,70)),weight());rev.addView(rr);
+        TextView tot=text("Total : "+money(totalIncome),11,true);tot.setGravity(Gravity.RIGHT);tot.setTextColor(Color.rgb(0,145,84));rev.addView(tot);content.addView(rev);
+
+        content.addView(sectionLabel("Priorités financières du PC"));
+        JSONArray priorities=snapshot==null?null:snapshot.optJSONArray("financePriorities");
+        if(priorities==null||priorities.length()==0){TextView none=text("Aucune priorité financière reçue du PC.",10,false);none.setTextColor(Color.GRAY);content.addView(none);}
+        else for(int i=0;i<priorities.length();i++){Object raw=priorities.opt(i);if(raw instanceof JSONObject){JSONObject p=(JSONObject)raw;String title=p.optString("name",p.optString("title",p.optString("label","Priorité "+(i+1))));String body=p.optString("description",p.optString("note",p.optString("value","")));content.addView(infoCard(title,body));}else if(raw!=null)content.addView(infoCard("Priorité "+(i+1),String.valueOf(raw)));}
+
+        JSONObject pcOrg=snapshot==null?null:snapshot.optJSONObject("financialOrganization");
+        if(pcOrg==null&&snapshot!=null)pcOrg=snapshot.optJSONObject("organization");
         SharedPreferences sp=getSharedPreferences(PREFS,MODE_PRIVATE);
-        Spinner mode=new Spinner(this);String[] modes={"Proportionnel aux revenus","50 / 50","Montants fixes","Personnalisé"};mode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,modes));String oldMode=sp.getString("org_mode",modes[0]);for(int i=0;i<modes.length;i++)if(modes[i].equals(oldMode))mode.setSelection(i);addLabeled(content,"Méthode de répartition",mode);
-        EditText essential=input("Ex. 60");essential.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);essential.setText(sp.getString("org_essential","60"));addLabeled(content,"% dépenses essentielles",essential);
-        EditText debt=input("Ex. 15");debt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);debt.setText(sp.getString("org_debt","15"));addLabeled(content,"% remboursement des dettes",debt);
-        EditText saving=input("Ex. 15");saving.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);saving.setText(sp.getString("org_saving","15"));addLabeled(content,"% épargne / objectifs",saving);
-        EditText invest=input("Ex. 10");invest.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);invest.setText(sp.getString("org_invest","10"));addLabeled(content,"% placements",invest);
-        EditText notes=input("Règles ou priorités du couple");notes.setSingleLine(false);notes.setMinLines(3);notes.setText(sp.getString("org_notes",""));addLabeled(content,"Notes / priorités",notes);
-        Button save=primaryButton("Enregistrer l'organisation financière");save.setOnClickListener(v->{
+        Spinner mode=new Spinner(this);String[] modes={"Proportionnel aux revenus","50 / 50","Montants fixes","Personnalisé"};mode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,modes));
+        String oldMode=pcOrg!=null?pcOrg.optString("mode",sp.getString("org_mode",modes[0])):sp.getString("org_mode",modes[0]);for(int i=0;i<modes.length;i++)if(modes[i].equals(oldMode))mode.setSelection(i);addLabeled(content,"Méthode de répartition",mode);
+
+        double ep=pcOrg!=null?pcOrg.optDouble("essentialPct",Double.NaN):Double.NaN;
+        double dpct=pcOrg!=null?pcOrg.optDouble("debtPct",Double.NaN):Double.NaN;
+        double sav=pcOrg!=null?pcOrg.optDouble("savingPct",Double.NaN):Double.NaN;
+        double inv=pcOrg!=null?pcOrg.optDouble("investmentPct",Double.NaN):Double.NaN;
+        EditText essential=input("Ex. 60");essential.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);essential.setText(Double.isNaN(ep)?sp.getString("org_essential","60"):fmt(ep));addLabeled(content,"% dépenses essentielles",essential);
+        EditText debt=input("Ex. 15");debt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);debt.setText(Double.isNaN(dpct)?sp.getString("org_debt","15"):fmt(dpct));addLabeled(content,"% remboursement des dettes",debt);
+        EditText saving=input("Ex. 15");saving.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);saving.setText(Double.isNaN(sav)?sp.getString("org_saving","15"):fmt(sav));addLabeled(content,"% épargne / objectifs",saving);
+        EditText invest=input("Ex. 10");invest.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);invest.setText(Double.isNaN(inv)?sp.getString("org_invest","10"):fmt(inv));addLabeled(content,"% placements",invest);
+        EditText notes=input("Règles ou priorités du couple");notes.setSingleLine(false);notes.setMinLines(3);notes.setText(pcOrg!=null?pcOrg.optString("notes",sp.getString("org_notes","")):sp.getString("org_notes",""));addLabeled(content,"Notes / priorités",notes);
+
+        Button save=primaryButton("Enregistrer les changements");save.setOnClickListener(v->{
             double total=number(essential)+number(debt)+number(saving)+number(invest);if(Math.abs(total-100)>0.01){toast("La répartition doit totaliser 100 %. Total actuel : "+fmt(total)+" %.");return;}
             if(treeUri==null||!hasPersistedTreePermission(treeUri)){toast("Choisis d'abord le dossier Google Drive.");return;}
             try{
                 JSONObject p=new JSONObject();p.put("mode",String.valueOf(mode.getSelectedItem()));p.put("essentialPct",number(essential));p.put("debtPct",number(debt));p.put("savingPct",number(saving));p.put("investmentPct",number(invest));p.put("notes",notes.getText().toString().trim());
+                p.put("incomeHomme",homme);p.put("incomeFemme",femme);p.put("incomeCommun",commun);
                 appendMobileConfigOperation("financial_organization_update",p);
                 sp.edit().putString("org_mode",p.optString("mode")).putString("org_essential",essential.getText().toString()).putString("org_debt",debt.getText().toString()).putString("org_saving",saving.getText().toString()).putString("org_invest",invest.getText().toString()).putString("org_notes",notes.getText().toString()).apply();
-                toast("Organisation financière enregistrée.");
+                toast("Organisation financière envoyée au PC.");
             }catch(Exception ex){toast("Erreur : "+ex.getMessage());}
         });content.addView(save,new LinearLayout.LayoutParams(-1,dp(58)));
     }
