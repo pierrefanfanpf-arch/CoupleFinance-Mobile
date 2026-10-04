@@ -54,11 +54,13 @@ public class MainActivity extends Activity {
     private static final String PREF_LINK = "onedrive_folder_link";
     private static final String PREF_PHONE_HISTORY = "phone_movement_history_v1";
     private static final String WORKBOOK_NAME = "CoupleFinance_Mobile.xlsx";
+    private static final String SYNC_NAME = "CoupleFinance_Mobile_Sync.json";
     private static final String VIEW_NAME = "CoupleFinance_Mobile_View.json";
 
     private final Handler handler = new Handler();
     private Uri treeUri;
     private Uri workbookUri;
+    private Uri syncUri;
     private Uri viewUri;
     private JSONObject snapshot;
 
@@ -125,7 +127,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.16",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.17 JSON",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -265,8 +267,9 @@ public class MainActivity extends Activity {
 
     private void locateFiles() throws Exception {
         if (treeUri == null) return;
-        Uri wb = findChild(WORKBOOK_NAME), vw = findChild(VIEW_NAME);
+        Uri wb = findChild(WORKBOOK_NAME), sj = findChild(SYNC_NAME), vw = findChild(VIEW_NAME);
         if (wb != null) workbookUri = wb;
+        if (sj != null) syncUri = sj;
         if (vw != null) viewUri = vw;
         setConnection(true, "Dossier cloud connecté.");
     }
@@ -293,6 +296,51 @@ public class MainActivity extends Activity {
             }
         }
         return null;
+    }
+
+    private void ensureSyncJson() throws Exception {
+        if(syncUri!=null)return;
+        if(treeUri==null)throw new Exception("Choisis d'abord le dossier cloud dans Paramètres.");
+        Uri existing=findChild(SYNC_NAME);if(existing!=null){syncUri=existing;return;}
+        Uri created=DocumentsContract.createDocument(getContentResolver(),treeDocumentUri(),"application/json",SYNC_NAME);
+        if(created==null)throw new Exception("Impossible de créer "+SYNC_NAME);
+        JSONObject root=new JSONObject();root.put("schema","CoupleFinanceMobileSyncV2");root.put("version",2);root.put("operations",new JSONArray());
+        writeText(created,root.toString());syncUri=created;
+    }
+
+    private void writeText(Uri uri,String txt) throws Exception {
+        try(OutputStream out=getContentResolver().openOutputStream(uri,"rwt")){
+            if(out==null)throw new Exception("Le stockage cloud refuse l'écriture JSON.");
+            out.write(txt.getBytes(StandardCharsets.UTF_8));out.flush();
+        }
+    }
+
+    private String mobileOperationId(){
+        return "phone_"+System.currentTimeMillis()+"_"+Math.abs(new java.util.Random().nextInt(1000000));
+    }
+
+    private void appendJsonOperation(XlsxAppender.Entry e) throws Exception {
+        ensureSyncJson();
+        JSONObject root;String raw="";
+        try{raw=readText(syncUri);root=(raw==null||raw.trim().isEmpty())?new JSONObject():new JSONObject(raw);}catch(Exception ex){root=new JSONObject();}
+        JSONArray ops=root.optJSONArray("operations");if(ops==null)ops=new JSONArray();
+        JSONObject x=new JSONObject();String id=mobileOperationId();
+        x.put("id",id);x.put("createdAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss",Locale.CANADA_FRENCH).format(new Date()));
+        x.put("date",e.date);x.put("time",e.time);x.put("owner",e.owner);x.put("type",e.type);x.put("kind",jsonKind(e.type));
+        x.put("amount",e.amount);x.put("category",e.category);x.put("description",e.description);x.put("account",e.account);x.put("note",e.note);x.put("origin","Téléphone");
+        ops.put(x);
+        // Keep a bounded queue. Imported IDs on PC make repeated entries idempotent.
+        JSONArray kept=new JSONArray();int start=Math.max(0,ops.length()-750);for(int i=start;i<ops.length();i++)kept.put(ops.opt(i));
+        root.put("schema","CoupleFinanceMobileSyncV2");root.put("version",2);root.put("updatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss",Locale.CANADA_FRENCH).format(new Date()));root.put("operations",kept);
+        writeText(syncUri,root.toString());
+        JSONObject verify=new JSONObject(readText(syncUri));JSONArray va=verify.optJSONArray("operations");boolean found=false;
+        if(va!=null)for(int i=Math.max(0,va.length()-20);i<va.length();i++){JSONObject q=va.optJSONObject(i);if(q!=null&&id.equals(q.optString("id",""))){found=true;break;}}
+        if(!found)throw new Exception("L'opération JSON n'a pas été confirmée par le stockage cloud.");
+    }
+
+    private String jsonKind(String type){
+        String t=type==null?"":type.toLowerCase(Locale.CANADA_FRENCH);
+        if(t.contains("revenu"))return "income";if(t.contains("remboursement"))return "debtpayment";if(t.contains("épargne")||t.contains("epargne")||t.contains("transfert"))return "transfer";if(t.contains("événement")||t.contains("evenement"))return "event";if(t.contains("report"))return "defer";return "expense";
     }
 
     private void ensureWorkbook() throws Exception {
@@ -322,7 +370,7 @@ public class MainActivity extends Activity {
         try {
             if (treeUri != null) {
                 locateFiles();
-                if (workbookUri == null) ensureWorkbook();
+                if (syncUri == null) { try { ensureSyncJson(); } catch(Exception ignored){} }
                 Uri detectedView = findChild(VIEW_NAME);
                 if (detectedView != null) viewUri = detectedView;
             }
@@ -338,7 +386,7 @@ public class MainActivity extends Activity {
             String gen = snapshot.optString("generatedAt", "—");
             String period = snapshot.optString("period", "—");
             if(syncStatus!=null)syncStatus.setText("Vue PC : " + gen + "   •   " + period);
-            setConnection(true, "OneDrive connecté • Excel de saisie + vue PC détectés");
+            setConnection(true, "Cloud connecté • synchronisation JSON rapide + vue PC");
             showSection(currentSection);
             if (userMessage) toast("Vue Couple Finance actualisée.");
         } catch (Exception e) {
@@ -727,8 +775,8 @@ public class MainActivity extends Activity {
         e.note="RECURRENCE_ID="+rec.optString("id","")+"; NEWDATE="+newDate+"; PERIOD="+rec.optString("period","");
         new Thread(()->{
             try{
-                XlsxAppender.append(getContentResolver(),workbookUri,e);
-                runOnUiThread(()->{recordPhoneMovement(e,"Envoyé vers Excel");toast("Report envoyé au PC pour le "+newDate+".");});
+                appendJsonOperation(e);
+                runOnUiThread(()->{recordPhoneMovement(e,"Synchronisé JSON");toast("Report envoyé au PC pour le "+newDate+".");});
             }catch(Exception ex){runOnUiThread(()->toast("Erreur d'écriture : "+ex.getMessage()));}
         }).start();
     }
