@@ -134,7 +134,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.23 Organisation familiale",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.24 Répartition intelligente",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -520,6 +520,35 @@ public class MainActivity extends Activity {
         JSONArray priorities=snapshot==null?null:snapshot.optJSONArray("financePriorities");
         if(priorities==null||priorities.length()==0)content.addView(text("Aucune priorité reçue du PC.",10,false));
         else for(int i=0;i<priorities.length();i++){Object raw=priorities.opt(i);if(raw instanceof JSONObject){JSONObject p=(JSONObject)raw;content.addView(infoCard((i+1)+". "+p.optString("name",p.optString("title",p.optString("label","Priorité"))),p.optString("description",p.optString("note",p.optString("value","")))));}else if(raw!=null)content.addView(infoCard((i+1)+". Priorité",String.valueOf(raw)));}
+
+        content.addView(sectionLabel("Répartition intelligente"));
+        TextView hint=text("Sélectionne les revenus à répartir et les priorités. L'application calcule une proposition à partir des données synchronisées du PC.",10,false);hint.setTextColor(Color.rgb(83,100,120));content.addView(hint);
+        CheckBox useH=new CheckBox(this);useH.setText("Revenu Homme  •  "+money(incomeHomme));useH.setChecked(incomeHomme>0);content.addView(useH);
+        CheckBox useF=new CheckBox(this);useF.setText("Revenu Femme  •  "+money(incomeFemme));useF.setChecked(incomeFemme>0);content.addView(useF);
+        CheckBox useC=new CheckBox(this);useC.setText("Revenus communs / allocations  •  "+money(incomeCommun));useC.setChecked(incomeCommun>0);content.addView(useC);
+        CheckBox prEss=new CheckBox(this);prEss.setText("Priorité : dépenses essentielles");prEss.setChecked(true);content.addView(prEss);
+        CheckBox prDebt=new CheckBox(this);prDebt.setText("Priorité : remboursement des dettes");prDebt.setChecked(true);content.addView(prDebt);
+        CheckBox prSave=new CheckBox(this);prSave.setText("Priorité : épargne / objectifs");prSave.setChecked(true);content.addView(prSave);
+        CheckBox prInv=new CheckBox(this);prInv.setText("Priorité : placements / investissements");content.addView(prInv);
+        Spinner strategy=new Spinner(this);String[] strategies={"Équilibrée","Priorités sélectionnées","Dettes d'abord","Épargne / objectifs d'abord"};strategy.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,strategies));addLabeled(content,"Stratégie",strategy);
+        LinearLayout proposal=softCard(Color.WHITE,Color.rgb(225,232,240));TextView proposalText=text("Appuie sur Analyser et générer.",11,false);proposal.addView(proposalText);content.addView(proposal);
+        final double[] alloc=new double[4];
+        Button analyze=primaryButton("Analyser et générer la répartition");analyze.setOnClickListener(v->{
+            double pool=(useH.isChecked()?incomeHomme:0)+(useF.isChecked()?incomeFemme:0)+(useC.isChecked()?incomeCommun:0);
+            if(pool<=0){toast("Sélectionne au moins un revenu disponible.");return;}
+            double[] w={prEss.isChecked()?number(essential):0,prDebt.isChecked()?number(debt):0,prSave.isChecked()?number(saving):0,prInv.isChecked()?number(invest):0};
+            String st=String.valueOf(strategy.getSelectedItem());
+            if("Dettes d'abord".equals(st)&&prDebt.isChecked())w[1]+=30;
+            if("Épargne / objectifs d'abord".equals(st)&&prSave.isChecked())w[2]+=30;
+            if("Priorités sélectionnées".equals(st)){for(int i=0;i<4;i++)if(w[i]>0)w[i]=25;}
+            double ws=w[0]+w[1]+w[2]+w[3];if(ws<=0){toast("Sélectionne au moins une priorité.");return;}
+            for(int i=0;i<4;i++)alloc[i]=pool*w[i]/ws;
+            proposalText.setText("Montant à répartir : "+money(pool)+"\n\nDépenses essentielles : "+money(alloc[0])+"\nDettes : "+money(alloc[1])+"\nÉpargne / objectifs : "+money(alloc[2])+"\nPlacements : "+money(alloc[3]));
+        });content.addView(analyze,new LinearLayout.LayoutParams(-1,dp(58)));
+        Button apply=primaryButton("Appliquer cette répartition");apply.setOnClickListener(v->{
+            double sum=alloc[0]+alloc[1]+alloc[2]+alloc[3];if(sum<=0){toast("Génère d'abord une répartition.");return;}if(treeUri==null||!hasPersistedTreePermission(treeUri)){toast("Choisis d'abord le dossier Google Drive.");return;}
+            try{JSONObject p=new JSONObject();p.put("strategy",String.valueOf(strategy.getSelectedItem()));p.put("useHomme",useH.isChecked());p.put("useFemme",useF.isChecked());p.put("useCommun",useC.isChecked());p.put("incomeHomme",incomeHomme);p.put("incomeFemme",incomeFemme);p.put("incomeCommun",incomeCommun);p.put("essentialAmount",alloc[0]);p.put("debtAmount",alloc[1]);p.put("savingAmount",alloc[2]);p.put("investmentAmount",alloc[3]);p.put("totalAllocated",sum);p.put("apply",true);appendMobileConfigOperation("financial_allocation_apply",p);toast("Répartition envoyée. Elle sera appliquée lors de la synchronisation PC.");}catch(Exception ex){toast("Erreur : "+ex.getMessage());}
+        });content.addView(apply,new LinearLayout.LayoutParams(-1,dp(58)));
 
         EditText notes=input("Règles, priorités ou notes du couple");notes.setSingleLine(false);notes.setMinLines(3);notes.setText(pcOrg!=null?pcOrg.optString("notes",sp.getString("org_notes","")):sp.getString("org_notes",""));addLabeled(content,"Notes de l'organisation familiale",notes);
         Button save=primaryButton("Enregistrer l'organisation familiale");save.setOnClickListener(v->{double sum=number(essential)+number(debt)+number(saving)+number(invest);if(Math.abs(sum-100)>0.01){toast("La répartition doit totaliser 100 %. Total : "+fmt(sum)+" %.");return;}if(treeUri==null||!hasPersistedTreePermission(treeUri)){toast("Choisis d'abord le dossier Google Drive.");return;}try{JSONObject p=new JSONObject();p.put("mode",String.valueOf(mode.getSelectedItem()));p.put("essentialPct",number(essential));p.put("debtPct",number(debt));p.put("savingPct",number(saving));p.put("investmentPct",number(invest));p.put("notes",notes.getText().toString().trim());p.put("incomeHomme",incomeHomme);p.put("incomeFemme",incomeFemme);p.put("incomeCommun",incomeCommun);appendMobileConfigOperation("financial_organization_update",p);sp.edit().putString("org_mode",p.optString("mode")).putString("org_essential",essential.getText().toString()).putString("org_debt",debt.getText().toString()).putString("org_saving",saving.getText().toString()).putString("org_invest",invest.getText().toString()).putString("org_notes",notes.getText().toString()).apply();toast("Organisation familiale envoyée au PC.");}catch(Exception ex){toast("Erreur : "+ex.getMessage());}});content.addView(save,new LinearLayout.LayoutParams(-1,dp(58)));
