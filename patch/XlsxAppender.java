@@ -31,9 +31,11 @@ public final class XlsxAppender {
             original=readAll(in);
         }
         List<Part> parts=unzip(original);
-        Part sheet=findWritableSheet(parts);
-        if(sheet==null) throw new Exception("Aucune feuille Excel utilisable.");
+        List<String> shared=sharedStrings(parts);
+        Part sheet=findWritableSheet(parts,shared);
+        if(sheet==null) throw new Exception("Feuille de saisie introuvable (en-têtes Date/Montant requis).");
         String xml=new String(sheet.data,StandardCharsets.UTF_8);
+        int before=maxRow(xml);
         xml=appendRow(xml,e);
         sheet.data=xml.getBytes(StandardCharsets.UTF_8);
         byte[] updated=zip(parts);
@@ -41,19 +43,68 @@ public final class XlsxAppender {
             if(out==null) throw new Exception("Le stockage cloud refuse l'écriture.");
             out.write(updated);out.flush();
         }
+
+        // Never report success until the provider lets us read the newly written row back.
+        byte[] check;
+        try(InputStream in=cr.openInputStream(uri)){
+            if(in==null) throw new Exception("Impossible de relire le fichier Excel après écriture.");
+            check=readAll(in);
+        }
+        List<Part> checkParts=unzip(check);
+        Part checkSheet=findWritableSheet(checkParts,sharedStrings(checkParts));
+        if(checkSheet==null) throw new Exception("Vérification impossible : feuille de saisie introuvable après écriture.");
+        String checkXml=new String(checkSheet.data,StandardCharsets.UTF_8);
+        if(maxRow(checkXml)<=before || !rowContainsEntry(checkXml,e)){
+            throw new Exception("Écriture non confirmée par le stockage cloud. La saisie n'a pas été validée.");
+        }
     }
 
-    private static Part findWritableSheet(List<Part> parts){
-        Part first=null;
+    private static Part findWritableSheet(List<Part> parts,List<String> shared){
+        Part fallback=null;
         for(Part p:parts){
-            if(p.name.startsWith("xl/worksheets/sheet")&&p.name.endsWith(".xml")){
-                if(first==null)first=p;
-                String s=new String(p.data,StandardCharsets.UTF_8);
-                String l=s.toLowerCase();
-                if(l.contains("date")&&l.contains("montant")) return p;
-            }
+            if(!p.name.startsWith("xl/worksheets/sheet")||!p.name.endsWith(".xml"))continue;
+            if(fallback==null)fallback=p;
+            String xml=new String(p.data,StandardCharsets.UTF_8);
+            String headers=decodedFirstRows(xml,shared,4).toLowerCase();
+            boolean date=headers.contains("date");
+            boolean amount=headers.contains("montant")||headers.contains("amount");
+            boolean type=headers.contains("type")||headers.contains("catégorie")||headers.contains("categorie");
+            if(date&&amount&&type)return p;
         }
-        return first;
+        // Do not silently write into an arbitrary sheet when the workbook structure is unknown.
+        return null;
+    }
+
+    private static List<String> sharedStrings(List<Part> parts){
+        List<String> out=new ArrayList<>();
+        Part ss=null;for(Part p:parts)if("xl/sharedStrings.xml".equals(p.name)){ss=p;break;}
+        if(ss==null)return out;
+        String x=new String(ss.data,StandardCharsets.UTF_8);int pos=0;
+        while((pos=x.indexOf("<si",pos))>=0){int st=x.indexOf('>',pos),en=x.indexOf("</si>",st);if(st<0||en<0)break;String si=x.substring(st+1,en);StringBuilder val=new StringBuilder();int q=0;
+            while((q=si.indexOf("<t",q))>=0){int ts=si.indexOf('>',q),te=si.indexOf("</t>",ts);if(ts<0||te<0)break;val.append(unesc(si.substring(ts+1,te)));q=te+4;}
+            out.add(val.toString());pos=en+5;
+        }
+        return out;
+    }
+
+    private static String decodedFirstRows(String xml,List<String> shared,int rows){
+        StringBuilder out=new StringBuilder();int pos=0,count=0;
+        while(count<rows&&(pos=xml.indexOf("<row",pos))>=0){int end=xml.indexOf("</row>",pos);if(end<0)break;String row=xml.substring(pos,end+6);int cpos=0;
+            while((cpos=row.indexOf("<c",cpos))>=0){int ce=row.indexOf("</c>",cpos);if(ce<0)break;String cell=row.substring(cpos,ce+4);String tag=cell.substring(0,Math.min(cell.length(),cell.indexOf('>')+1));String v=between(cell,"<v>","</v>");String txt="";
+                if(tag.contains("t=\"s\"")&&v!=null){try{int ix=Integer.parseInt(v.trim());if(ix>=0&&ix<shared.size())txt=shared.get(ix);}catch(Exception ignored){}}
+                else if(tag.contains("inlineStr")){String t=between(cell,"<t>","</t>");if(t==null){int tp=cell.indexOf("<t ");if(tp>=0){int ts=cell.indexOf('>',tp),te=cell.indexOf("</t>",ts);if(ts>=0&&te>=0)t=cell.substring(ts+1,te);}}if(t!=null)txt=unesc(t);}
+                else if(v!=null)txt=v;
+                if(!txt.isEmpty())out.append(' ').append(txt);cpos=ce+4;
+            }count++;pos=end+6;
+        }return out.toString();
+    }
+
+    private static String between(String s,String a,String b){int p=s.indexOf(a);if(p<0)return null;p+=a.length();int e=s.indexOf(b,p);return e<0?null:s.substring(p,e);}
+    private static String unesc(String s){return s.replace("&lt;","<").replace("&gt;",">").replace("&quot;","\"").replace("&amp;","&");}
+    private static int maxRow(String xml){int max=0,pos=0;while((pos=xml.indexOf("<row",pos))>=0){int end=xml.indexOf('>',pos);if(end<0)break;int r=attrInt(xml.substring(pos,end+1),"r");if(r>max)max=r;pos=end+1;}return max;}
+    private static boolean rowContainsEntry(String xml,Entry e){
+        String tail=xml.substring(Math.max(0,xml.length()-12000));
+        return tail.contains(esc(nz(e.date)))&&tail.contains(esc(nz(e.description)))&&tail.contains("<v>"+num(e.amount)+"</v>");
     }
 
     private static String appendRow(String xml, Entry e) throws Exception {
