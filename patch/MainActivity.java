@@ -180,13 +180,13 @@ public class MainActivity extends Activity {
         if(center)b.setElevation(dp(7)); b.setOnClickListener(v->showSection(section)); return b;
     }
 
-    private void saveGoogle DriveLink() {
+    private void saveGoogleDriveLink() {
         String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_LINK, link).apply();
         toast(link.isEmpty() ? "Lien Google Drive effacé." : "Lien Google Drive mémorisé.");
     }
 
-    private void validateAndConnectGoogle Drive() {
+    private void validateAndConnectGoogleDrive() {
         String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
         if (link.isEmpty()) { toast("Entre le lien de ton répertoire Google Drive."); return; }
         if (!(link.startsWith("https://") || link.startsWith("http://"))) { link = "https://" + link; oneDriveLink.setText(link); }
@@ -203,7 +203,7 @@ public class MainActivity extends Activity {
         chooseFolder();
     }
 
-    private void openGoogle DriveLink() {
+    private void openGoogleDriveLink() {
         String link = oneDriveLink == null ? "" : oneDriveLink.getText().toString().trim();
         if (link.isEmpty()) { toast("Entre d'abord le lien du dossier Google Drive."); return; }
         if (!(link.startsWith("https://") || link.startsWith("http://"))) { link = "https://" + link; oneDriveLink.setText(link); }
@@ -592,7 +592,7 @@ public class MainActivity extends Activity {
         oneDriveLink=input("Colle ici le lien de ton répertoire Google Drive");oneDriveLink.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(PREF_LINK,""));
         addLabeled(c,"Lien du répertoire Google Drive",oneDriveLink);
         boolean writeOk=treeUri!=null&&hasPersistedTreePermission(treeUri);
-        Button connect=primaryButton(writeOk?"✓ Google Drive connecté — Valider":"Valider et connecter");connect.setOnClickListener(v->validateAndConnectGoogle Drive());c.addView(connect,new LinearLayout.LayoutParams(-1,-2));
+        Button connect=primaryButton(writeOk?"✓ Google Drive connecté — Valider":"Valider et connecter");connect.setOnClickListener(v->validateAndConnectGoogleDrive());c.addView(connect,new LinearLayout.LayoutParams(-1,-2));
         TextView help=text(writeOk?"L'autorisation Android du répertoire est mémorisée. Aucune nouvelle sélection n'est nécessaire.":"À la première connexion seulement, Android demandera d'autoriser le répertoire correspondant. L'autorisation sera ensuite mémorisée.",10,false);help.setTextColor(Color.GRAY);help.setPadding(0,dp(8),0,dp(5));c.addView(help);
         Button refresh=smallPill("↻ Actualiser");refresh.setOnClickListener(v->refreshSnapshot(true));c.addView(refresh,new LinearLayout.LayoutParams(-1,dp(48)));
         TextView write=text(writeOk?"✓ Google Drive connecté • écriture JSON autorisée":"○ Google Drive non autorisé en écriture",12,true);write.setTextColor(writeOk?Color.rgb(24,137,91):Color.rgb(190,120,30));write.setPadding(0,dp(10),0,dp(2));c.addView(write);
