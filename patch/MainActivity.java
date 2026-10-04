@@ -759,12 +759,9 @@ public class MainActivity extends Activity {
     }
 
     private boolean ensureWorkbookForWrite() {
-        if(treeUri==null && workbookUri==null){toast("Choisis d'abord le fichier Excel OneDrive ou Google Drive.");return false;}
-        try{
-            if(treeUri!=null){locateFiles();if(workbookUri==null)ensureWorkbook();}
-            if(workbookUri==null)throw new Exception("CoupleFinance_Mobile.xlsx n'est pas sélectionné.");
-            return true;
-        }catch(Exception e){toast("Excel mobile inaccessible : "+e.getMessage());return false;}
+        if(treeUri==null){toast("Choisis d'abord le dossier OneDrive / Google Drive dans Paramètres.");return false;}
+        try{locateFiles();ensureSyncJson();return true;}
+        catch(Exception e){toast("Synchronisation JSON inaccessible : "+e.getMessage());return false;}
     }
 
     private void writeDeferralCommand(JSONObject rec,String newDate) {
