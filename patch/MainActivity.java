@@ -127,7 +127,7 @@ public class MainActivity extends Activity {
 
         LinearLayout brand=vertical();
         TextView title=text("Couple Finance",23,true); title.setTextColor(Color.rgb(8,35,70)); brand.addView(title);
-        TextView sub=text("Gestion financière • v2.20 Google Drive",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
+        TextView sub=text("Gestion financière • v2.21 Édition mobile",11,false); sub.setTextColor(Color.rgb(91,105,120)); brand.addView(sub);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
 
         TextView sync=text("↻",27,true); sync.setTextColor(Color.rgb(8,35,70)); sync.setGravity(Gravity.CENTER);
@@ -395,6 +395,84 @@ public class MainActivity extends Activity {
         if(!found)throw new Exception("L'opération JSON n'a pas été confirmée par le stockage cloud.");
     }
 
+
+    private void appendMobileConfigOperation(String kind, JSONObject payload) throws Exception {
+        ensureSyncJson();
+        JSONObject root;String raw="";
+        try{raw=readText(syncUri);root=(raw==null||raw.trim().isEmpty())?new JSONObject():new JSONObject(raw);}catch(Exception ex){root=new JSONObject();}
+        JSONArray ops=root.optJSONArray("operations");if(ops==null)ops=new JSONArray();
+        JSONObject x=new JSONObject();String id=mobileOperationId();
+        x.put("id",id);x.put("createdAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss",Locale.CANADA_FRENCH).format(new Date()));
+        x.put("kind",kind);x.put("type",kind);x.put("origin","Téléphone");x.put("payload",payload);
+        ops.put(x);
+        JSONArray kept=new JSONArray();int start=Math.max(0,ops.length()-750);for(int i=start;i<ops.length();i++)kept.put(ops.opt(i));
+        root.put("schema","CoupleFinanceMobileSyncV2");root.put("version",2);root.put("updatedAt",new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss",Locale.CANADA_FRENCH).format(new Date()));root.put("operations",kept);
+        writeText(syncUri,root.toString());
+    }
+
+    private double number(EditText e){
+        try{return Double.parseDouble(e.getText().toString().trim().replace(',','.').replace(" ",""));}catch(Exception ex){return 0;}
+    }
+
+    private void editAccountDialog(JSONObject account){
+        LinearLayout box=vertical();box.setPadding(dp(18),dp(4),dp(18),0);
+        EditText name=input("Nom du compte");name.setText(account.optString("name",""));addLabeled(box,"Nom",name);
+        EditText institution=input("Institution");institution.setText(account.optString("institution",""));addLabeled(box,"Institution",institution);
+        Spinner own=new Spinner(this);String[] owners={"Homme","Femme","Commun"};own.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,owners));String oo=account.optString("owner","Commun");for(int i=0;i<owners.length;i++)if(owners[i].equalsIgnoreCase(oo))own.setSelection(i);addLabeled(box,"Propriétaire",own);
+        Spinner typ=new Spinner(this);String[] types={"Compte courant","Carte de crédit","Épargne","CELI","REEE","CELIAPP","Autre"};typ.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,types));String ot=account.optString("type","");for(int i=0;i<types.length;i++)if(types[i].equalsIgnoreCase(ot))typ.setSelection(i);addLabeled(box,"Type",typ);
+        EditText balance=input("0,00");balance.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL|android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);balance.setText(fmt(account.optDouble("balance",0)));addLabeled(box,"Solde actuel",balance);
+        new android.app.AlertDialog.Builder(this).setTitle("Modifier l'état du compte").setView(box).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w)->{
+            if(treeUri==null||!hasPersistedTreePermission(treeUri)){toast("Choisis d'abord le dossier Google Drive.");return;}
+            try{
+                JSONObject p=new JSONObject();p.put("id",account.optString("id",""));p.put("name",name.getText().toString().trim());p.put("institution",institution.getText().toString().trim());p.put("owner",String.valueOf(own.getSelectedItem()));p.put("accountType",String.valueOf(typ.getSelectedItem()));p.put("balance",number(balance));
+                appendMobileConfigOperation("account_update",p);
+                account.put("name",p.optString("name"));account.put("institution",p.optString("institution"));account.put("owner",p.optString("owner"));account.put("type",p.optString("accountType"));account.put("balance",p.optDouble("balance"));
+                toast("État du compte enregistré.");showSection("Comptes");
+            }catch(Exception ex){toast("Erreur : "+ex.getMessage());}
+        }).show();
+    }
+
+    private void editGoalDialog(JSONObject goal){
+        boolean create=goal==null;if(goal==null)goal=new JSONObject();final JSONObject targetGoal=goal;
+        LinearLayout box=vertical();box.setPadding(dp(18),dp(4),dp(18),0);
+        EditText name=input("Ex. Maison, voiture, fonds d'urgence");name.setText(goal.optString("name",""));addLabeled(box,"Objectif",name);
+        EditText target=input("0,00");target.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);target.setText(fmt(goal.optDouble("price",0)));addLabeled(box,"Montant cible",target);
+        EditText saved=input("0,00");saved.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);saved.setText(fmt(goal.optDouble("saved",0)));addLabeled(box,"Montant déjà accumulé",saved);
+        Spinner own=new Spinner(this);own.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Commun","Homme","Femme"}));addLabeled(box,"Objectif de",own);
+        new android.app.AlertDialog.Builder(this).setTitle(create?"Définir un objectif":"Modifier l'objectif").setView(box).setNegativeButton("Annuler",null).setPositiveButton("Enregistrer",(d,w)->{
+            if(name.getText().toString().trim().isEmpty()){toast("Donne un nom à l'objectif.");return;}
+            if(treeUri==null||!hasPersistedTreePermission(treeUri)){toast("Choisis d'abord le dossier Google Drive.");return;}
+            try{
+                JSONObject p=new JSONObject();String gid=targetGoal.optString("id",create?"goal_phone_"+System.currentTimeMillis():"");p.put("id",gid);p.put("name",name.getText().toString().trim());p.put("price",number(target));p.put("saved",number(saved));p.put("owner",String.valueOf(own.getSelectedItem()));
+                appendMobileConfigOperation(create?"goal_create":"goal_update",p);
+                if(snapshot!=null){JSONArray a=snapshot.optJSONArray("goals");if(a==null){a=new JSONArray();snapshot.put("goals",a);}if(create)a.put(p);else{targetGoal.put("name",p.optString("name"));targetGoal.put("price",p.optDouble("price"));targetGoal.put("saved",p.optDouble("saved"));targetGoal.put("owner",p.optString("owner"));}}
+                toast(create?"Objectif créé.":"Objectif modifié.");showSection("Objectifs");
+            }catch(Exception ex){toast("Erreur : "+ex.getMessage());}
+        }).show();
+    }
+
+    private void renderFinancialOrganization(){
+        currentSection="Organisation financière";content.removeAllViews();screenTitle("Organisation financière");
+        TextView intro=text("Définis comment le couple veut répartir son argent. Cette organisation est modifiable directement sur le téléphone.",11,false);intro.setTextColor(Color.rgb(83,100,120));content.addView(intro);
+        SharedPreferences sp=getSharedPreferences(PREFS,MODE_PRIVATE);
+        Spinner mode=new Spinner(this);String[] modes={"Proportionnel aux revenus","50 / 50","Montants fixes","Personnalisé"};mode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,modes));String oldMode=sp.getString("org_mode",modes[0]);for(int i=0;i<modes.length;i++)if(modes[i].equals(oldMode))mode.setSelection(i);addLabeled(content,"Méthode de répartition",mode);
+        EditText essential=input("Ex. 60");essential.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);essential.setText(sp.getString("org_essential","60"));addLabeled(content,"% dépenses essentielles",essential);
+        EditText debt=input("Ex. 15");debt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);debt.setText(sp.getString("org_debt","15"));addLabeled(content,"% remboursement des dettes",debt);
+        EditText saving=input("Ex. 15");saving.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);saving.setText(sp.getString("org_saving","15"));addLabeled(content,"% épargne / objectifs",saving);
+        EditText invest=input("Ex. 10");invest.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);invest.setText(sp.getString("org_invest","10"));addLabeled(content,"% placements",invest);
+        EditText notes=input("Règles ou priorités du couple");notes.setSingleLine(false);notes.setMinLines(3);notes.setText(sp.getString("org_notes",""));addLabeled(content,"Notes / priorités",notes);
+        Button save=primaryButton("Enregistrer l'organisation financière");save.setOnClickListener(v->{
+            double total=number(essential)+number(debt)+number(saving)+number(invest);if(Math.abs(total-100)>0.01){toast("La répartition doit totaliser 100 %. Total actuel : "+fmt(total)+" %.");return;}
+            if(treeUri==null||!hasPersistedTreePermission(treeUri)){toast("Choisis d'abord le dossier Google Drive.");return;}
+            try{
+                JSONObject p=new JSONObject();p.put("mode",String.valueOf(mode.getSelectedItem()));p.put("essentialPct",number(essential));p.put("debtPct",number(debt));p.put("savingPct",number(saving));p.put("investmentPct",number(invest));p.put("notes",notes.getText().toString().trim());
+                appendMobileConfigOperation("financial_organization_update",p);
+                sp.edit().putString("org_mode",p.optString("mode")).putString("org_essential",essential.getText().toString()).putString("org_debt",debt.getText().toString()).putString("org_saving",saving.getText().toString()).putString("org_invest",invest.getText().toString()).putString("org_notes",notes.getText().toString()).apply();
+                toast("Organisation financière enregistrée.");
+            }catch(Exception ex){toast("Erreur : "+ex.getMessage());}
+        });content.addView(save,new LinearLayout.LayoutParams(-1,dp(58)));
+    }
+
     private String jsonKind(String type){
         String t=type==null?"":type.toLowerCase(Locale.CANADA_FRENCH);
         if(t.contains("revenu"))return "income";if(t.contains("remboursement"))return "debtpayment";if(t.contains("épargne")||t.contains("epargne")||t.contains("transfert"))return "transfer";if(t.contains("événement")||t.contains("evenement"))return "event";if(t.contains("report"))return "defer";return "expense";
@@ -474,9 +552,11 @@ public class MainActivity extends Activity {
         if("Plus".equals(section)){renderMore();return;}
         if("Historique téléphone".equals(section)){renderPhoneHistory(false);return;}
         if("Mouvements".equals(section)){renderMovements();return;}
+        if("Organisation financière".equals(section)){renderFinancialOrganization();return;}
         TextView h=text(section,22,true);h.setTextColor(Color.rgb(7,51,94));h.setPadding(dp(2),dp(8),0,dp(4));content.addView(h);
         if("Saisie".equals(section)){buildEntryForm();return;}
-        TextView ro=text("Dépenses".equals(section)?"Lecture seule, sauf l’action Reporter sur une échéance.":"Lecture seule — les données principales proviennent de l'application PC.",11,false);
+        boolean editablePage="Comptes".equals(section)||"Objectifs".equals(section);
+        TextView ro=text(editablePage?"Édition mobile activée — touchez un élément pour le modifier.":("Dépenses".equals(section)?"Lecture seule, sauf l’action Reporter sur une échéance.":"Lecture seule — les données principales proviennent de l'application PC."),11,false);
         ro.setTextColor(Color.GRAY);content.addView(ro);spacer(content,8);
         if(snapshot==null){content.addView(infoCard("Aucune donnée","Connecte le stockage cloud dans Plus → Paramètres, puis actualise la vue PC."));return;}
         switch(section){
@@ -654,7 +734,7 @@ public class MainActivity extends Activity {
 
     private void renderMore(){
         screenTitle("Plus");
-        String[][] items={{"◉","Dettes","Dettes"},{"▣","Épargne et placements","Épargne"},{"▦","Agenda et échéances","Agenda"},{"▥","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"▤","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"}};
+        String[][] items={{"◉","Dettes","Dettes"},{"▣","Épargne et placements","Épargne"},{"▦","Agenda et échéances","Agenda"},{"▥","Budget","Budget"},{"◎","Objectifs","Objectifs"},{"⚖","Organisation financière","Organisation financière"},{"▤","Projections","Projections"},{"▤","Rapports","Rapports"},{"⚙","Paramètres","Paramètres"}};
         for(String[] it:items)content.addView(menuListRow(it[0],it[1],it[2]));
     }
 
@@ -682,11 +762,14 @@ public class MainActivity extends Activity {
     }
 
     private void renderGoalsMobile(){
-        screenTitle("Objectifs financiers");JSONArray a=snapshot==null?null:snapshot.optJSONArray("goals");if(empty(a)){emptyState("Aucun objectif.");return;}
+        screenTitle("Objectifs financiers");
+        TextView hint=text("Touchez un objectif pour le modifier. Les changements sont envoyés dans le JSON de synchronisation.",10,false);hint.setTextColor(Color.GRAY);content.addView(hint);
+        Button add=primaryButton("＋ Définir un nouvel objectif");add.setOnClickListener(v->editGoalDialog(null));content.addView(add,new LinearLayout.LayoutParams(-1,dp(50)));
+        JSONArray a=snapshot==null?null:snapshot.optJSONArray("goals");if(empty(a)){emptyState("Aucun objectif défini. Utilise le bouton ci-dessus pour en créer un.");return;}
         String[] icons={"⌂","▣","●","▤","✈"};int i=0;
         for(;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;double target=x.optDouble("price",0),saved=x.optDouble("saved",0),pct=target>0?Math.min(100,saved/target*100):0;
             LinearLayout c=softCard(Color.WHITE,Color.rgb(230,235,240));LinearLayout r=horizontal();TextView ic=text(icons[i%icons.length],18,true);ic.setGravity(Gravity.CENTER);ic.setTextColor(Color.rgb(0,166,96));r.addView(ic,new LinearLayout.LayoutParams(dp(42),dp(42)));
-            LinearLayout mid=vertical();TextView n=text(x.optString("name","Objectif"),12,true);n.setTextColor(Color.rgb(8,35,70));mid.addView(n);TextView v=text(money(saved)+" / "+money(target),10,false);v.setTextColor(Color.rgb(75,88,102));mid.addView(v);mid.addView(progressLine(pct,Color.rgb(0,166,96)));r.addView(mid,new LinearLayout.LayoutParams(0,-2,1));TextView p=text(Math.round(pct)+"%",10,true);p.setTextColor(Color.rgb(0,145,84));r.addView(p);c.addView(r);content.addView(c);}
+            LinearLayout mid=vertical();TextView n=text(x.optString("name","Objectif"),12,true);n.setTextColor(Color.rgb(8,35,70));mid.addView(n);TextView v=text(money(saved)+" / "+money(target),10,false);v.setTextColor(Color.rgb(75,88,102));mid.addView(v);mid.addView(progressLine(pct,Color.rgb(0,166,96)));r.addView(mid,new LinearLayout.LayoutParams(0,-2,1));TextView p=text(Math.round(pct)+"%  ✎",10,true);p.setTextColor(Color.rgb(0,145,84));r.addView(p);c.addView(r);c.setClickable(true);c.setOnClickListener(vw->editGoalDialog(x));content.addView(c);}
     }
 
     private void renderProjectionMobile(){
@@ -754,7 +837,9 @@ public class MainActivity extends Activity {
         LinearLayout mid=vertical();TextView n=text(x.optString("owner","Commun")+" — "+x.optString("institution","")+" — "+x.optString("name","Compte"),10,true);n.setTextColor(Color.rgb(8,35,70));mid.addView(n);
         if(card){double min=x.optDouble("minPayment",0),rem=x.optDouble("minPaymentRemaining",min);TextView m=text("Minimum : "+money(min)+(rem<min?" • Reste : "+money(rem):""),9,false);m.setTextColor(Color.GRAY);mid.addView(m);}
         r.addView(mid,new LinearLayout.LayoutParams(0,-2,1));double bal=x.optDouble("balance",0);TextView v=text(money(bal),11,true);v.setGravity(Gravity.RIGHT);v.setTextColor(bal<0?Color.rgb(215,48,62):Color.rgb(8,35,70));r.addView(v,new LinearLayout.LayoutParams(dp(104),-2));
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(0,dp(2),0,dp(2));r.setLayoutParams(lp);return r;
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(0,dp(2),0,dp(2));r.setLayoutParams(lp);
+        r.setClickable(true);r.setOnClickListener(vw->editAccountDialog(x));
+        return r;
     }
 
     private void renderIncome() {
@@ -929,12 +1014,10 @@ public class MainActivity extends Activity {
 
     private void buildEntryForm() {
         screenTitle("Ajouter un mouvement");
-        entryType=new Spinner(this);entryType.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Dépense","Revenu","Transaction","Remboursement crédit","Épargne","Événement"}));entryType.setVisibility(View.GONE);content.addView(entryType);
-        LinearLayout types=horizontal();
-        Button b0=typeButton("▣\nDépense",Color.rgb(255,234,236),Color.rgb(220,45,60));b0.setOnClickListener(v->selectEntryType(0));types.addView(b0,weight());
-        Button b1=typeButton("＋\nRevenu",Color.rgb(232,249,238),Color.rgb(0,150,83));b1.setOnClickListener(v->selectEntryType(1));types.addView(b1,weight());
-        Button b2=typeButton("▤\nRembours.",Color.rgb(255,241,226),Color.rgb(230,120,15));b2.setOnClickListener(v->selectEntryType(3));types.addView(b2,weight());
-        Button b3=typeButton("⇄\nTransfert",Color.rgb(244,237,255),Color.rgb(119,64,201));b3.setOnClickListener(v->selectEntryType(4));types.addView(b3,weight());content.addView(types);
+        TextView intro=text("Choisis le type de transaction puis complète les informations.",11,false);intro.setTextColor(Color.rgb(83,100,120));content.addView(intro);
+        entryType=new Spinner(this);
+        entryType.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Dépense","Revenu","Transaction","Remboursement crédit","Épargne / Transfert","Événement"}));
+        addLabeled(content,"Type de transaction",entryType);
 
         date=input(isoDate());date.setFocusable(false);date.setOnClickListener(v->pickDate());addLabeled(content,"Date",date);
         amount=input("0,00 $");amount.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);addLabeled(content,"Montant",amount);
@@ -951,7 +1034,7 @@ public class MainActivity extends Activity {
         note=input("Optionnel");note.setMinLines(2);note.setSingleLine(false);note.setGravity(Gravity.TOP);addLabeled(content,"Note",note);
         Button receipt=typeButton("▣  Ajouter une photo du reçu",Color.rgb(247,249,252),Color.rgb(70,88,106));receipt.setOnClickListener(v->toast("La photo du reçu sera ajoutée dans une prochaine étape sans modifier la synchronisation JSON."));content.addView(receipt,new LinearLayout.LayoutParams(-1,dp(52)));
 
-        entryType.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){String type=String.valueOf(entryType.getSelectedItem());destinationBlock.setVisibility("Épargne".equals(type)?View.VISIBLE:View.GONE);debtBlock.setVisibility("Remboursement crédit".equals(type)?View.VISIBLE:View.GONE);}public void onNothingSelected(android.widget.AdapterView<?> p){}});
+        entryType.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){String type=String.valueOf(entryType.getSelectedItem());destinationBlock.setVisibility(("Épargne".equals(type)||"Épargne / Transfert".equals(type))?View.VISIBLE:View.GONE);debtBlock.setVisibility("Remboursement crédit".equals(type)?View.VISIBLE:View.GONE);}public void onNothingSelected(android.widget.AdapterView<?> p){}});
 
         saveButton=primaryButton("Enregistrer");saveButton.setTextSize(15);saveButton.setPadding(dp(10),dp(14),dp(10),dp(14));saveButton.setOnClickListener(v->saveEntry());content.addView(saveButton,new LinearLayout.LayoutParams(-1,dp(58)));
     }
@@ -985,7 +1068,6 @@ public class MainActivity extends Activity {
     }
 
     private void saveEntry() {
-        if(!ensureWorkbookForWrite())return;
         String uiType=String.valueOf(entryType.getSelectedItem());
         String desc=description.getText().toString().trim();
         if(desc.isEmpty())desc=uiType+" téléphone";
@@ -1007,7 +1089,7 @@ public class MainActivity extends Activity {
         if(src.startsWith("—"))src="";
         e.account=src;
         String userNote=note.getText().toString().trim();
-        if("Épargne".equals(uiType)){
+        if(("Épargne".equals(uiType)||"Épargne / Transfert".equals(uiType))){
             String dest=String.valueOf(destinationAccount.getSelectedItem());
             if(dest.isEmpty()||dest.equals(src)){toast("Choisissez un compte destination différent.");return;}
             e.category="Épargne";
